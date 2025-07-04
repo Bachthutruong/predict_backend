@@ -36,7 +36,7 @@ const limiter = (0, express_rate_limit_1.default)({
 app.use('/api/', limiter);
 // CORS configuration
 app.use((0, cors_1.default)({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: process.env.FRONTEND_URL || 'https://predict-frontend-six.vercel.app',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization']
