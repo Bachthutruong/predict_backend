@@ -1,7 +1,7 @@
 import express from 'express';
-import User from '@/models/user';
-import Prediction from '@/models/prediction';
-import PointTransaction from '@/models/point-transaction';
+import User from '../models/user';
+import Prediction from '../models/prediction';
+import PointTransaction from '../models/point-transaction';
 
 const router = express.Router();
 

@@ -4,13 +4,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const auth_1 = require("@/middleware/auth");
-const prediction_1 = __importDefault(require("@/models/prediction"));
-const user_1 = __importDefault(require("@/models/user"));
-const feedback_1 = __importDefault(require("@/models/feedback"));
-const question_1 = __importDefault(require("@/models/question"));
-const point_transaction_1 = __importDefault(require("@/models/point-transaction"));
-const user_prediction_1 = __importDefault(require("@/models/user-prediction"));
+const auth_1 = require("../middleware/auth");
+const prediction_1 = __importDefault(require("../models/prediction"));
+const user_1 = __importDefault(require("../models/user"));
+const feedback_1 = __importDefault(require("../models/feedback"));
+const question_1 = __importDefault(require("../models/question"));
+const point_transaction_1 = __importDefault(require("../models/point-transaction"));
+const user_prediction_1 = __importDefault(require("../models/user-prediction"));
 const router = express_1.default.Router();
 // Apply auth middleware to all routes
 router.use(auth_1.authMiddleware);
@@ -70,19 +70,24 @@ router.get('/dashboard-stats', async (req, res) => {
 // Create prediction
 router.post('/predictions', async (req, res) => {
     try {
-        const { title, description, imageUrl, answer, pointsCost } = req.body;
+        const { title, description, imageUrl, correctAnswer, pointsCost } = req.body;
         const prediction = new prediction_1.default({
             title,
             description,
             imageUrl,
-            answer,
+            answer: correctAnswer,
             pointsCost,
             authorId: req.user.id
         });
         await prediction.save();
+        // Transform the data to match frontend expectations
+        const transformedPrediction = {
+            ...prediction.toObject(),
+            correctAnswer: prediction.answer
+        };
         res.status(201).json({
             success: true,
-            data: prediction,
+            data: transformedPrediction,
             message: 'Prediction created successfully'
         });
     }
@@ -101,9 +106,17 @@ router.get('/predictions', async (req, res) => {
             .populate('authorId', 'name')
             .populate('winnerId', 'name avatarUrl')
             .sort({ createdAt: -1 });
+        // Transform the data to match frontend expectations
+        const transformedPredictions = predictions.map(prediction => {
+            const obj = prediction.toObject();
+            return {
+                ...obj,
+                correctAnswer: obj.answer
+            };
+        });
         res.json({
             success: true,
-            data: predictions
+            data: transformedPredictions
         });
     }
     catch (error) {
@@ -147,6 +160,7 @@ router.get('/predictions/:id', async (req, res) => {
         });
         const predictionWithStats = {
             ...prediction.toObject(),
+            correctAnswer: prediction.answer,
             totalPredictions,
             correctPredictions,
             totalPointsAwarded,
@@ -185,9 +199,14 @@ router.put('/predictions/:id', async (req, res) => {
         prediction.pointsCost = pointsCost;
         prediction.status = status;
         await prediction.save();
+        // Transform the data to match frontend expectations
+        const transformedPrediction = {
+            ...prediction.toObject(),
+            correctAnswer: prediction.answer
+        };
         res.json({
             success: true,
-            data: prediction,
+            data: transformedPrediction,
             message: 'Prediction updated successfully'
         });
     }
@@ -241,9 +260,14 @@ router.put('/predictions/:id/status', async (req, res) => {
         }
         prediction.status = status;
         await prediction.save();
+        // Transform the data to match frontend expectations
+        const transformedPrediction = {
+            ...prediction.toObject(),
+            correctAnswer: prediction.answer
+        };
         res.json({
             success: true,
-            data: prediction,
+            data: transformedPrediction,
             message: `Prediction status updated to ${status}`
         });
     }
@@ -318,6 +342,7 @@ router.get('/feedback', async (req, res) => {
             const obj = item.toObject();
             return {
                 ...obj,
+                id: obj._id.toString(), // Ensure ID is properly set
                 user: obj.userId
             };
         });

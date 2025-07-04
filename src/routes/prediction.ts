@@ -1,8 +1,8 @@
 import express from 'express';
-import { authMiddleware, AuthRequest } from '@/middleware/auth';
-import Prediction from '@/models/prediction';
-import UserPrediction from '@/models/user-prediction';
-import User from '@/models/user';
+import { authMiddleware, AuthRequest } from '../middleware/auth';
+import Prediction from '../models/prediction';
+import UserPrediction from '../models/user-prediction';
+import User from '../models/user';
 
 const router = express.Router();
 

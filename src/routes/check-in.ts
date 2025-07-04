@@ -1,8 +1,8 @@
 import express from 'express';
-import { authMiddleware, AuthRequest } from '@/middleware/auth';
-import User from '@/models/user';
-import Question from '@/models/question';
-import CheckIn from '@/models/check-in';
+import { authMiddleware, AuthRequest } from '../middleware/auth';
+import User from '../models/user';
+import Question from '../models/question';
+import CheckIn from '../models/check-in';
 
 const router = express.Router();
 

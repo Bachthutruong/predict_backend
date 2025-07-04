@@ -7,17 +7,17 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
-import dbConnect from '@/config/database';
+import dbConnect from './config/database';
 
 // Import routes
-import authRoutes from '@/routes/auth';
-import userRoutes from '@/routes/user';
-import predictionRoutes from '@/routes/prediction';
-import adminRoutes from '@/routes/admin';
-import staffRoutes from '@/routes/staff';
-import checkInRoutes from '@/routes/check-in';
-import feedbackRoutes from '@/routes/feedback';
-import dashboardRoutes from '@/routes/dashboard';
+import authRoutes from './routes/auth';
+import userRoutes from './routes/user';
+import predictionRoutes from './routes/prediction';
+import adminRoutes from './routes/admin';
+import staffRoutes from './routes/staff';
+import checkInRoutes from './routes/check-in';
+import feedbackRoutes from './routes/feedback';
+import dashboardRoutes from './routes/dashboard';
 
 const app = express();
 const PORT = process.env.PORT || 5001;

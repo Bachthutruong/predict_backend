@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthUser } from '@/types';
+import { AuthUser } from '../types';
 export interface AuthRequest extends Request {
     user?: AuthUser;
 }

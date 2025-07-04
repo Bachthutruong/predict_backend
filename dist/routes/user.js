@@ -4,10 +4,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const auth_1 = require("@/middleware/auth");
-const user_1 = __importDefault(require("@/models/user"));
-const point_transaction_1 = __importDefault(require("@/models/point-transaction"));
-const referral_1 = __importDefault(require("@/models/referral"));
+const auth_1 = require("../middleware/auth");
+const user_1 = __importDefault(require("../models/user"));
+const point_transaction_1 = __importDefault(require("../models/point-transaction"));
+const referral_1 = __importDefault(require("../models/referral"));
 const router = express_1.default.Router();
 // Get current user profile
 router.get('/profile', auth_1.authMiddleware, async (req, res) => {

@@ -1,9 +1,9 @@
 import express from 'express';
-import { authMiddleware, staffMiddleware, AuthRequest } from '@/middleware/auth';
-import User from '@/models/user';
-import Prediction from '@/models/prediction';
-import Question from '@/models/question';
-import Feedback from '@/models/feedback';
+import { authMiddleware, staffMiddleware, AuthRequest } from '../middleware/auth';
+import User from '../models/user';
+import Prediction from '../models/prediction';
+import Question from '../models/question';
+import Feedback from '../models/feedback';
 
 const router = express.Router();
 

@@ -1,8 +1,8 @@
 import express from 'express';
-import { authMiddleware, AuthRequest } from '@/middleware/auth';
-import User from '@/models/user';
-import PointTransaction from '@/models/point-transaction';
-import Referral from '@/models/referral';
+import { authMiddleware, AuthRequest } from '../middleware/auth';
+import User from '../models/user';
+import PointTransaction from '../models/point-transaction';
+import Referral from '../models/referral';
 import { Response } from 'express';
 
 const router = express.Router();

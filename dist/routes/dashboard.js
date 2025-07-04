@@ -4,8 +4,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const user_1 = __importDefault(require("@/models/user"));
-const prediction_1 = __importDefault(require("@/models/prediction"));
+const user_1 = __importDefault(require("../models/user"));
+const prediction_1 = __importDefault(require("../models/prediction"));
 const router = express_1.default.Router();
 // Get dashboard stats
 router.get('/stats', async (req, res) => {

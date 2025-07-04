@@ -4,10 +4,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const auth_1 = require("@/middleware/auth");
-const prediction_1 = __importDefault(require("@/models/prediction"));
-const user_prediction_1 = __importDefault(require("@/models/user-prediction"));
-const user_1 = __importDefault(require("@/models/user"));
+const auth_1 = require("../middleware/auth");
+const prediction_1 = __importDefault(require("../models/prediction"));
+const user_prediction_1 = __importDefault(require("../models/user-prediction"));
+const user_1 = __importDefault(require("../models/user"));
 const router = express_1.default.Router();
 // Get all active predictions
 router.get('/', async (req, res) => {

@@ -11,16 +11,16 @@ const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const compression_1 = __importDefault(require("compression"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
-const database_1 = __importDefault(require("@/config/database"));
+const database_1 = __importDefault(require("./config/database"));
 // Import routes
-const auth_1 = __importDefault(require("@/routes/auth"));
-const user_1 = __importDefault(require("@/routes/user"));
-const prediction_1 = __importDefault(require("@/routes/prediction"));
-const admin_1 = __importDefault(require("@/routes/admin"));
-const staff_1 = __importDefault(require("@/routes/staff"));
-const check_in_1 = __importDefault(require("@/routes/check-in"));
-const feedback_1 = __importDefault(require("@/routes/feedback"));
-const dashboard_1 = __importDefault(require("@/routes/dashboard"));
+const auth_1 = __importDefault(require("./routes/auth"));
+const user_1 = __importDefault(require("./routes/user"));
+const prediction_1 = __importDefault(require("./routes/prediction"));
+const admin_1 = __importDefault(require("./routes/admin"));
+const staff_1 = __importDefault(require("./routes/staff"));
+const check_in_1 = __importDefault(require("./routes/check-in"));
+const feedback_1 = __importDefault(require("./routes/feedback"));
+const dashboard_1 = __importDefault(require("./routes/dashboard"));
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5001;
 // Security middleware

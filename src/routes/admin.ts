@@ -1,11 +1,11 @@
 import express from 'express';
-import { authMiddleware, adminMiddleware, AuthRequest } from '@/middleware/auth';
-import Prediction from '@/models/prediction';
-import User from '@/models/user';
-import Feedback from '@/models/feedback';
-import Question from '@/models/question';
-import PointTransaction from '@/models/point-transaction';
-import UserPrediction from '@/models/user-prediction';
+import { authMiddleware, adminMiddleware, AuthRequest } from '../middleware/auth';
+import Prediction from '../models/prediction';
+import User from '../models/user';
+import Feedback from '../models/feedback';
+import Question from '../models/question';
+import PointTransaction from '../models/point-transaction';
+import UserPrediction from '../models/user-prediction';
 
 const router = express.Router();
 

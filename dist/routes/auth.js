@@ -7,8 +7,8 @@ const express_1 = __importDefault(require("express"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const crypto_1 = __importDefault(require("crypto"));
-const user_1 = __importDefault(require("@/models/user"));
-const email_1 = require("@/utils/email");
+const user_1 = __importDefault(require("../models/user"));
+const email_1 = require("../utils/email");
 const router = express_1.default.Router();
 // Register
 router.post('/register', async (req, res) => {

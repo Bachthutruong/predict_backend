@@ -2,9 +2,9 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import User from '@/models/user';
-import { ApiResponse, LoginCredentials, RegisterData } from '@/types';
-import { sendVerificationEmail } from '@/utils/email';
+import User from '../models/user';
+import { ApiResponse, LoginCredentials, RegisterData } from '../types';
+import { sendVerificationEmail } from '../utils/email';
 
 const router = express.Router();
 

@@ -1,6 +1,6 @@
 import express from 'express';
-import { authMiddleware, AuthRequest } from '@/middleware/auth';
-import Feedback from '@/models/feedback';
+import { authMiddleware, AuthRequest } from '../middleware/auth';
+import Feedback from '../models/feedback';
 
 const router = express.Router();
 

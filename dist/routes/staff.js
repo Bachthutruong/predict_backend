@@ -4,11 +4,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const auth_1 = require("@/middleware/auth");
-const user_1 = __importDefault(require("@/models/user"));
-const prediction_1 = __importDefault(require("@/models/prediction"));
-const question_1 = __importDefault(require("@/models/question"));
-const feedback_1 = __importDefault(require("@/models/feedback"));
+const auth_1 = require("../middleware/auth");
+const user_1 = __importDefault(require("../models/user"));
+const prediction_1 = __importDefault(require("../models/prediction"));
+const question_1 = __importDefault(require("../models/question"));
+const feedback_1 = __importDefault(require("../models/feedback"));
 const router = express_1.default.Router();
 // Apply auth and staff middleware to all routes
 router.use(auth_1.authMiddleware);
