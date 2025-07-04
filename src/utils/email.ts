@@ -11,7 +11,7 @@ const transporter = nodemailer.createTransport({
 });
 
 export async function sendVerificationEmail(email: string, token: string) {
-  const verificationUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/verify-email?token=${token}`;
+  const verificationUrl = `${process.env.CLIENT_URL || 'https://predict-frontend-six.vercel.app/'}/verify-email?token=${token}`;
   
   const mailOptions = {
     from: process.env.SMTP_FROM || 'noreply@predictwin.com',
