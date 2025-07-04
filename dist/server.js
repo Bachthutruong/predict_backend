@@ -35,8 +35,30 @@ const limiter = (0, express_rate_limit_1.default)({
 });
 app.use('/api/', limiter);
 // CORS configuration
+const allowedOrigins = [
+    'https://predict-frontend-six.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:5173'
+];
+// Add environment variable origin if it exists
+if (process.env.FRONTEND_URL) {
+    allowedOrigins.push(process.env.FRONTEND_URL);
+}
 app.use((0, cors_1.default)({
-    origin: process.env.FRONTEND_URL || 'https://predict-frontend-six.vercel.app',
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin)
+            return callback(null, true);
+        // Remove trailing slash from origin for comparison
+        const cleanOrigin = origin.replace(/\/$/, '');
+        // Check if the origin is in the allowed list
+        const isAllowed = allowedOrigins.some(allowedOrigin => allowedOrigin.replace(/\/$/, '') === cleanOrigin);
+        if (isAllowed) {
+            return callback(null, true);
+        }
+        const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+        return callback(new Error(msg), false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization']
