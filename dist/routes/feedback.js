@@ -16,9 +16,14 @@ router.post('/', auth_1.authMiddleware, async (req, res) => {
             feedbackText
         });
         await feedback.save();
+        // Transform the data to match frontend expectations
+        const transformedFeedback = {
+            ...feedback.toObject(),
+            id: feedback._id.toString() // Ensure ID is properly set
+        };
         res.status(201).json({
             success: true,
-            data: feedback,
+            data: transformedFeedback,
             message: 'Feedback submitted successfully'
         });
     }
@@ -35,9 +40,17 @@ router.get('/my', auth_1.authMiddleware, async (req, res) => {
     try {
         const feedback = await feedback_1.default.find({ userId: req.user.id })
             .sort({ createdAt: -1 });
+        // Transform the data to match frontend expectations
+        const transformedFeedback = feedback.map(item => {
+            const obj = item.toObject();
+            return {
+                ...obj,
+                id: obj._id.toString() // Ensure ID is properly set
+            };
+        });
         res.json({
             success: true,
-            data: feedback
+            data: transformedFeedback
         });
     }
     catch (error) {

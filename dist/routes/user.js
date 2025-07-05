@@ -19,9 +19,14 @@ router.get('/profile', auth_1.authMiddleware, async (req, res) => {
                 message: 'User not found'
             });
         }
+        // Transform the data to match frontend expectations
+        const transformedUser = {
+            ...user.toObject(),
+            id: user._id.toString() // Ensure ID is properly set
+        };
         res.json({
             success: true,
-            data: user
+            data: transformedUser
         });
     }
     catch (error) {
@@ -37,9 +42,14 @@ router.put('/profile', auth_1.authMiddleware, async (req, res) => {
     try {
         const { name, avatarUrl } = req.body;
         const user = await user_1.default.findByIdAndUpdate(req.user.id, { name, avatarUrl }, { new: true });
+        // Transform the data to match frontend expectations
+        const transformedUser = {
+            ...user.toObject(),
+            id: user._id.toString() // Ensure ID is properly set
+        };
         res.json({
             success: true,
-            data: user,
+            data: transformedUser,
             message: 'Profile updated successfully'
         });
     }
@@ -58,9 +68,17 @@ router.get('/transactions', auth_1.authMiddleware, async (req, res) => {
             .populate('adminId', 'name')
             .sort({ createdAt: -1 })
             .limit(50);
+        // Transform the data to match frontend expectations
+        const transformedTransactions = transactions.map(transaction => {
+            const obj = transaction.toObject();
+            return {
+                ...obj,
+                id: obj._id.toString() // Ensure ID is properly set
+            };
+        });
         res.json({
             success: true,
-            data: transactions
+            data: transformedTransactions
         });
     }
     catch (error) {
@@ -93,11 +111,22 @@ router.get('/referrals', auth_1.authMiddleware, async (req, res) => {
         const referrals = await referral_1.default.find({ referringUser: userId })
             .populate('referredUser', 'name email createdAt consecutiveCheckIns')
             .sort({ createdAt: -1 });
+        // Transform the data to match frontend expectations
+        const transformedReferrals = referrals.map(referral => {
+            const obj = referral.toObject();
+            return {
+                ...obj,
+                id: obj._id.toString() // Ensure ID is properly set
+            };
+        });
         res.json({
             success: true,
             data: {
-                currentUser,
-                referrals
+                currentUser: {
+                    ...currentUser.toObject(),
+                    id: currentUser._id.toString() // Ensure ID is properly set
+                },
+                referrals: transformedReferrals
             }
         });
     }

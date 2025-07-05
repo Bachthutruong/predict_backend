@@ -21,6 +21,7 @@ const staff_1 = __importDefault(require("./routes/staff"));
 const check_in_1 = __importDefault(require("./routes/check-in"));
 const feedback_1 = __importDefault(require("./routes/feedback"));
 const dashboard_1 = __importDefault(require("./routes/dashboard"));
+const cloudinary_1 = __importDefault(require("./routes/cloudinary"));
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5001;
 // Security middleware
@@ -87,6 +88,7 @@ app.use('/api/staff', staff_1.default);
 app.use('/api/check-in', check_in_1.default);
 app.use('/api/feedback', feedback_1.default);
 app.use('/api/dashboard', dashboard_1.default);
+app.use('/api/cloudinary', cloudinary_1.default);
 // 404 handler
 app.use('*', (req, res) => {
     res.status(404).json({

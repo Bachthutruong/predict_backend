@@ -6,9 +6,67 @@ import CheckIn from '../models/check-in';
 
 const router = express.Router();
 
+// Check today's check-in status
+router.get('/status', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.id;
+    
+    // Check if already checked in today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const existingCheckIn = await CheckIn.findOne({
+      userId,
+      checkInDate: { $gte: today }
+    });
+
+    if (existingCheckIn) {
+      return res.json({
+        success: true,
+        data: {
+          hasCheckedIn: true,
+          isCorrect: existingCheckIn.isCorrect,
+          pointsEarned: existingCheckIn.pointsEarned
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        hasCheckedIn: false
+      }
+    });
+  } catch (error) {
+    console.error('Check status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
 // Get today's question
 router.get('/question', authMiddleware, async (req: AuthRequest, res) => {
   try {
+    const userId = req.user!.id;
+    
+    // Check if already checked in today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const existingCheckIn = await CheckIn.findOne({
+      userId,
+      checkInDate: { $gte: today }
+    });
+
+    if (existingCheckIn) {
+      return res.status(400).json({
+        success: false,
+        message: 'Already checked in today'
+      });
+    }
+
     const question = await Question.findOne({ status: 'active' })
       .sort({ isPriority: -1, displayCount: 1 });
 
@@ -63,14 +121,26 @@ router.post('/submit', authMiddleware, async (req: AuthRequest, res) => {
     }
 
     const isCorrect = answer.toLowerCase().trim() === question.answer.toLowerCase().trim();
-    const pointsEarned = isCorrect ? question.points : Math.floor(question.points / 2);
+    
+    // Only allow check-in if answer is correct
+    if (!isCorrect) {
+      return res.status(400).json({
+        success: false,
+        message: 'Incorrect answer. Please try again!',
+        data: {
+          isCorrect: false
+        }
+      });
+    }
 
-    // Create check-in record
+    const pointsEarned = question.points;
+
+    // Create check-in record (only for correct answers)
     const checkIn = new CheckIn({
       userId,
       questionId,
       answer,
-      isCorrect,
+      isCorrect: true,
       pointsEarned
     });
     await checkIn.save();
@@ -79,7 +149,7 @@ router.post('/submit', authMiddleware, async (req: AuthRequest, res) => {
     const user = await User.findById(userId);
     if (user) {
       user.points += pointsEarned;
-      user.consecutiveCheckIns = isCorrect ? user.consecutiveCheckIns + 1 : 0;
+      user.consecutiveCheckIns = user.consecutiveCheckIns + 1;
       user.lastCheckInDate = new Date();
       await user.save();
     }
@@ -87,11 +157,11 @@ router.post('/submit', authMiddleware, async (req: AuthRequest, res) => {
     res.json({
       success: true,
       data: {
-        isCorrect,
+        isCorrect: true,
         pointsEarned,
         correctAnswer: question.answer
       },
-      message: isCorrect ? 'Correct! Points earned!' : 'Incorrect, but you still earned some points!'
+      message: 'Correct! Points earned and check-in completed!'
     });
   } catch (error) {
     console.error('Submit check-in error:', error);

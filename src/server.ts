@@ -18,6 +18,7 @@ import staffRoutes from './routes/staff';
 import checkInRoutes from './routes/check-in';
 import feedbackRoutes from './routes/feedback';
 import dashboardRoutes from './routes/dashboard';
+import cloudinaryRoutes from './routes/cloudinary';
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -100,6 +101,7 @@ app.use('/api/staff', staffRoutes);
 app.use('/api/check-in', checkInRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/cloudinary', cloudinaryRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

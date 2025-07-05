@@ -24,6 +24,14 @@ router.get('/stats', async (req, res) => {
         const recentPredictions = await prediction_1.default.find({ status: 'active' })
             .sort({ createdAt: -1 })
             .limit(6);
+        // Transform the data to match frontend expectations
+        const transformedRecentPredictions = recentPredictions.map(prediction => {
+            const obj = prediction.toObject();
+            return {
+                ...obj,
+                id: obj._id.toString() // Ensure ID is properly set
+            };
+        });
         res.json({
             success: true,
             data: {
@@ -31,7 +39,7 @@ router.get('/stats', async (req, res) => {
                 totalPredictions,
                 activePredictions,
                 totalPoints,
-                recentPredictions
+                recentPredictions: transformedRecentPredictions
             }
         });
     }

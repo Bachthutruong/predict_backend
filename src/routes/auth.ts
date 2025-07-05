@@ -26,7 +26,7 @@ router.post('/register', async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Generate avatar URL
+    // Generate avatar URL (fallback if no upload)
     const avatarUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}&backgroundColor=4169E1&textColor=ffffff`;
 
     // Handle referral

@@ -95,6 +95,7 @@ router.post('/predictions', async (req: AuthRequest, res) => {
     // Transform the data to match frontend expectations
     const transformedPrediction = {
       ...prediction.toObject(),
+      id: prediction._id.toString(), // Ensure ID is properly set
       correctAnswer: prediction.answer
     };
 
@@ -125,6 +126,7 @@ router.get('/predictions', async (req, res) => {
       const obj = prediction.toObject();
       return {
         ...obj,
+        id: obj._id.toString(), // Ensure ID is properly set
         correctAnswer: obj.answer
       };
     });
@@ -146,6 +148,14 @@ router.get('/predictions', async (req, res) => {
 router.get('/predictions/:id', async (req, res) => {
   try {
     const { id } = req.params;
+
+    // Validate ObjectId
+    if (!id || id === 'undefined' || id === 'null') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid prediction ID'
+      });
+    }
 
     const prediction = await Prediction.findById(id)
       .populate('authorId', 'name')
@@ -175,12 +185,14 @@ router.get('/predictions/:id', async (req, res) => {
       const obj = up.toObject();
       return {
         ...obj,
+        id: obj._id.toString(), // Ensure ID is properly set
         user: obj.userId
       };
     });
 
     const predictionWithStats = {
       ...prediction.toObject(),
+      id: prediction._id.toString(), // Ensure ID is properly set
       correctAnswer: prediction.answer,
       totalPredictions,
       correctPredictions,
@@ -228,6 +240,7 @@ router.put('/predictions/:id', async (req: AuthRequest, res) => {
     // Transform the data to match frontend expectations
     const transformedPrediction = {
       ...prediction.toObject(),
+      id: prediction._id.toString(), // Ensure ID is properly set
       correctAnswer: prediction.answer
     };
 
@@ -297,6 +310,7 @@ router.put('/predictions/:id/status', async (req: AuthRequest, res) => {
     // Transform the data to match frontend expectations
     const transformedPrediction = {
       ...prediction.toObject(),
+      id: prediction._id.toString(), // Ensure ID is properly set
       correctAnswer: prediction.answer
     };
 
@@ -320,9 +334,18 @@ router.get('/users', async (req, res) => {
     const users = await User.find()
       .sort({ createdAt: -1 });
 
+    // Transform the data to match frontend expectations
+    const transformedUsers = users.map(user => {
+      const obj = user.toObject();
+      return {
+        ...obj,
+        id: obj._id.toString() // Ensure ID is properly set
+      };
+    });
+
     res.json({
       success: true,
-      data: users
+      data: transformedUsers
     });
   } catch (error) {
     console.error('Get all users error:', error);
@@ -496,9 +519,18 @@ router.get('/questions', async (req, res) => {
     const questions = await Question.find()
       .sort({ createdAt: -1 });
 
+    // Transform the data to match frontend expectations
+    const transformedQuestions = questions.map(question => {
+      const obj = question.toObject();
+      return {
+        ...obj,
+        id: obj._id.toString() // Ensure ID is properly set
+      };
+    });
+
     res.json({
       success: true,
-      data: questions
+      data: transformedQuestions
     });
   } catch (error) {
     console.error('Get questions error:', error);
@@ -524,9 +556,15 @@ router.post('/questions', async (req: AuthRequest, res) => {
 
     await question.save();
 
+    // Transform the data to match frontend expectations
+    const transformedQuestion = {
+      ...question.toObject(),
+      id: question._id.toString() // Ensure ID is properly set
+    };
+
     res.status(201).json({
       success: true,
-      data: question,
+      data: transformedQuestion,
       message: 'Question created successfully'
     });
   } catch (error) {
@@ -552,9 +590,15 @@ router.put('/questions/:id', async (req: AuthRequest, res) => {
       });
     }
 
+    // Transform the data to match frontend expectations
+    const transformedQuestion = {
+      ...question.toObject(),
+      id: question._id.toString() // Ensure ID is properly set
+    };
+
     res.json({
       success: true,
-      data: question,
+      data: transformedQuestion,
       message: 'Question updated successfully'
     });
   } catch (error) {
@@ -580,6 +624,7 @@ router.get('/transactions', async (req, res) => {
       const obj = transaction.toObject();
       return {
         ...obj,
+        id: obj._id.toString(), // Ensure ID is properly set
         user: obj.userId,
         admin: obj.adminId
       };
@@ -605,9 +650,18 @@ router.get('/staff', async (req, res) => {
     const staff = await User.find({ role: 'staff' })
       .sort({ createdAt: -1 });
 
+    // Transform the data to match frontend expectations
+    const transformedStaff = staff.map(user => {
+      const obj = user.toObject();
+      return {
+        ...obj,
+        id: obj._id.toString() // Ensure ID is properly set
+      };
+    });
+
     res.json({
       success: true,
-      data: staff
+      data: transformedStaff
     });
   } catch (error) {
     console.error('Get staff error:', error);
@@ -636,16 +690,22 @@ router.post('/staff', async (req: AuthRequest, res) => {
       name,
       email,
       password,
-      avatarUrl: avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`,
+      avatarUrl: avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}&backgroundColor=4169E1&textColor=ffffff`,
       role: 'staff',
       isEmailVerified: true // Staff accounts are pre-verified
     });
 
     await staff.save();
 
+    // Transform the data to match frontend expectations
+    const transformedStaff = {
+      ...staff.toObject(),
+      id: staff._id.toString() // Ensure ID is properly set
+    };
+
     res.status(201).json({
       success: true,
-      data: staff,
+      data: transformedStaff,
       message: 'Staff account created successfully'
     });
   } catch (error) {
@@ -694,9 +754,15 @@ router.put('/staff/:id', async (req: AuthRequest, res) => {
 
     const updatedStaff = await User.findByIdAndUpdate(id, updateData, { new: true });
 
+    // Transform the data to match frontend expectations
+    const transformedStaff = {
+      ...updatedStaff.toObject(),
+      id: updatedStaff._id.toString() // Ensure ID is properly set
+    };
+
     res.json({
       success: true,
-      data: updatedStaff,
+      data: transformedStaff,
       message: 'Staff account updated successfully'
     });
   } catch (error) {

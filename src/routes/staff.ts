@@ -164,10 +164,19 @@ router.get('/predictions', async (req, res) => {
 
     const total = await Prediction.countDocuments(query);
 
+    // Transform the data to match frontend expectations
+    const transformedPredictions = predictions.map(prediction => {
+      const obj = prediction.toObject();
+      return {
+        ...obj,
+        id: obj._id.toString() // Ensure ID is properly set
+      };
+    });
+
     res.json({
       success: true,
       data: {
-        predictions,
+        predictions: transformedPredictions,
         pagination: {
           page: Number(page),
           limit: Number(limit),

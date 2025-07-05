@@ -15,9 +15,17 @@ router.get('/', async (req, res) => {
         const predictions = await prediction_1.default.find({ status: 'active' })
             .populate('authorId', 'name')
             .sort({ createdAt: -1 });
+        // Transform the data to match frontend expectations
+        const transformedPredictions = predictions.map(prediction => {
+            const obj = prediction.toObject();
+            return {
+                ...obj,
+                id: obj._id.toString() // Ensure ID is properly set
+            };
+        });
         res.json({
             success: true,
-            data: predictions
+            data: transformedPredictions
         });
     }
     catch (error) {
@@ -31,6 +39,9 @@ router.get('/', async (req, res) => {
 // Get prediction details
 router.get('/:id', async (req, res) => {
     try {
+        const { page = 1, limit = 20 } = req.query;
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
         const prediction = await prediction_1.default.findById(req.params.id)
             .populate('authorId', 'name avatarUrl')
             .populate('winnerId', 'name avatarUrl');
@@ -40,14 +51,33 @@ router.get('/:id', async (req, res) => {
                 message: 'Prediction not found'
             });
         }
+        // Get paginated user predictions
         const userPredictions = await user_prediction_1.default.find({ predictionId: req.params.id })
             .populate('userId', 'name avatarUrl')
-            .sort({ createdAt: -1 });
+            .sort({ createdAt: -1 })
+            .limit(limitNum)
+            .skip((pageNum - 1) * limitNum);
+        // Get total count for pagination
+        const totalUserPredictions = await user_prediction_1.default.countDocuments({ predictionId: req.params.id });
+        const totalPages = Math.ceil(totalUserPredictions / limitNum);
+        // Transform user predictions to match frontend expectations
+        const transformedUserPredictions = userPredictions.map(up => {
+            const obj = up.toObject();
+            return {
+                ...obj,
+                id: obj._id.toString(), // Ensure ID is properly set
+                user: obj.userId
+            };
+        });
         res.json({
             success: true,
             data: {
-                prediction,
-                userPredictions
+                prediction: {
+                    ...prediction.toObject(),
+                    id: prediction._id.toString() // Ensure ID is properly set
+                },
+                userPredictions: transformedUserPredictions,
+                totalPages
             }
         });
     }
