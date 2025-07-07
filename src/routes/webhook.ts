@@ -386,7 +386,16 @@ router.post('/test', async (req: Request, res: Response) => {
 // Super simple test endpoint - absolutely no checks
 router.all('/simple-test', async (req: Request, res: Response) => {
   console.log('🚀 SIMPLE TEST ENDPOINT HIT');
-  res.status(200).send('OK - WEBHOOK WORKING');
+  console.log('📍 Current time:', new Date().toISOString());
+  console.log('📍 Request method:', req.method);
+  console.log('📍 Request IP:', req.ip);
+  res.status(200).json({
+    success: true,
+    message: 'WEBHOOK WORKING - Rate limiting completely disabled',
+    timestamp: new Date().toISOString(),
+    method: req.method,
+    ip: req.ip
+  });
 });
 
 // GET endpoint to confirm webhooks are public

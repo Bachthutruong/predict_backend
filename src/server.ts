@@ -6,7 +6,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
-import rateLimit from 'express-rate-limit';
+// import rateLimit from 'express-rate-limit'; // TEMPORARILY DISABLED
 import dbConnect from './config/database';
 
 // Import routes
@@ -30,7 +30,7 @@ app.use(helmet({
 }));
 
 // Trust proxy for rate limiting (needed for Render, Heroku, etc.)
-app.set('trust proxy', 1);
+// app.set('trust proxy', 1); // TEMPORARILY DISABLED while debugging
 
 // CORS configuration
 const allowedOrigins = [
@@ -125,25 +125,25 @@ app.get('/health', (req, res) => {
 console.log('🔧 Setting up WEBHOOK routes with NO rate limiting...');
 app.use('/api/webhook', webhookRoutes);
 
-// Rate limiting ONLY for non-webhook API routes
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.'
-});
+// TEMPORARILY DISABLED: Rate limiting to debug webhook issues
+// const limiter = rateLimit({
+//   windowMs: 15 * 60 * 1000, // 15 minutes
+//   max: 100, // limit each IP to 100 requests per windowMs
+//   message: 'Too many requests from this IP, please try again later.'
+// });
 
-console.log('🔧 Setting up API routes WITH rate limiting...');
+console.log('🔧 Setting up API routes WITHOUT rate limiting (temporarily disabled)...');
 
-// API routes with rate limiting applied
-app.use('/api/auth', limiter, authRoutes);
-app.use('/api/users', limiter, userRoutes);
-app.use('/api/predictions', limiter, predictionRoutes);
-app.use('/api/admin', limiter, adminRoutes);
-app.use('/api/staff', limiter, staffRoutes);
-app.use('/api/check-in', limiter, checkInRoutes);
-app.use('/api/feedback', limiter, feedbackRoutes);
-app.use('/api/dashboard', limiter, dashboardRoutes);
-app.use('/api/cloudinary', limiter, cloudinaryRoutes);
+// API routes WITHOUT rate limiting (temporarily disabled)
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/predictions', predictionRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/staff', staffRoutes);
+app.use('/api/check-in', checkInRoutes);
+app.use('/api/feedback', feedbackRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/cloudinary', cloudinaryRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
