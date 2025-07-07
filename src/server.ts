@@ -20,6 +20,7 @@ import feedbackRoutes from './routes/feedback';
 import dashboardRoutes from './routes/dashboard';
 import cloudinaryRoutes from './routes/cloudinary';
 import webhookRoutes from './routes/webhook';
+console.log('🔍 Webhook routes imported:', typeof webhookRoutes, webhookRoutes);
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -110,6 +111,18 @@ app.get('/health', (req, res) => {
     success: true, 
     message: 'PredictWin API is running!',
     timestamp: new Date().toISOString()
+  });
+});
+
+// TEMPORARY: Direct webhook test endpoint in server.ts
+app.all('/api/webhook/direct-test', (req, res) => {
+  console.log('🔥 DIRECT WEBHOOK TEST HIT');
+  res.json({
+    success: true,
+    message: 'Direct webhook test working',
+    timestamp: new Date().toISOString(),
+    method: req.method,
+    path: req.path
   });
 });
 
