@@ -10,7 +10,7 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const compression_1 = __importDefault(require("compression"));
-// import rateLimit from 'express-rate-limit'; // TEMPORARILY DISABLED
+// Rate limiting completely removed from dependencies
 const database_1 = __importDefault(require("./config/database"));
 // Import routes
 const auth_1 = __importDefault(require("./routes/auth"));
@@ -77,6 +77,20 @@ app.use((0, compression_1.default)());
 // Body parsing middleware
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
+// Special middleware for webhooks to handle both JSON and form data
+app.use('/api/webhook', (req, res, next) => {
+    console.log('🔍 Webhook Body Parser:', {
+        contentType: req.headers['content-type'],
+        bodyType: typeof req.body,
+        bodyKeys: Object.keys(req.body || {}),
+        rawBody: req.body
+    });
+    // If it's form data, try to parse it
+    if (req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
+        console.log('📝 Form data detected, body:', req.body);
+    }
+    next();
+});
 // Connect to database
 (0, database_1.default)();
 // Global debug middleware
@@ -128,13 +142,8 @@ app.use('/api/webhook', (0, cors_1.default)({
     preflightContinue: false,
     optionsSuccessStatus: 200
 }), webhook_1.default);
-// TEMPORARILY DISABLED: Rate limiting to debug webhook issues
-// const limiter = rateLimit({
-//   windowMs: 15 * 60 * 1000, // 15 minutes
-//   max: 100, // limit each IP to 100 requests per windowMs
-//   message: 'Too many requests from this IP, please try again later.'
-// });
-console.log('🔧 Setting up API routes WITHOUT rate limiting (temporarily disabled)...');
+// Rate limiting completely removed from project
+console.log('🔧 Setting up API routes WITHOUT rate limiting (permanently removed)...');
 // API routes WITHOUT rate limiting (temporarily disabled)
 app.use('/api/auth', auth_1.default);
 app.use('/api/users', user_1.default);
