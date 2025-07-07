@@ -2,41 +2,42 @@ import mongoose, { Schema, models, model } from 'mongoose';
 
 const OrderSchema = new Schema({
   // WordPress/WooCommerce Order ID
-  wordpressOrderId: { type: Number, required: true, unique: true, index: true },
+  wordpressOrderId: { type: Number, required: false, unique: true, index: true },
   
   // Order Status
   status: {
     type: String,
     enum: ['pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed', 'trash', 'ecpay-shipping'],
-    required: true,
-    index: true
+    required: false,
+    index: true,
+    default: 'pending'
   },
   
   // Customer Information
-  customerEmail: { type: String, required: true, index: true },
-  customerName: { type: String, required: true },
+  customerEmail: { type: String, required: false, index: true, default: 'unknown@example.com' },
+  customerName: { type: String, required: false, default: 'Unknown Customer' },
   customerPhone: { type: String },
   
   // Order Financial Information
-  total: { type: String, required: true },
-  currency: { type: String, required: true, default: 'TWD' },
+  total: { type: String, required: false, default: '0' },
+  currency: { type: String, required: false, default: 'TWD' },
   
   // Payment Information
-  paymentMethod: { type: String, required: true, default: 'unknown' },
-  paymentMethodTitle: { type: String, required: true, default: 'Unknown Payment Method' },
+  paymentMethod: { type: String, required: false, default: 'unknown' },
+  paymentMethodTitle: { type: String, required: false, default: 'Unknown Payment Method' },
   transactionId: { type: String },
   
   // Order Items
   lineItems: [{
-    id: { type: Number, required: true },
-    name: { type: String, required: true },
-    product_id: { type: Number, required: true },
+    id: { type: Number, required: false },
+    name: { type: String, required: false, default: 'Unknown Product' },
+    product_id: { type: Number, required: false },
     variation_id: { type: Number, default: 0 },
-    quantity: { type: Number, required: true },
+    quantity: { type: Number, required: false, default: 1 },
     tax_class: { type: String, default: '' },
-    subtotal: { type: String, required: true },
+    subtotal: { type: String, required: false, default: '0' },
     subtotal_tax: { type: String, default: '0' },
-    total: { type: String, required: true },
+    total: { type: String, required: false, default: '0' },
     total_tax: { type: String, default: '0' },
     taxes: [{
       id: { type: Number },
@@ -49,7 +50,7 @@ const OrderSchema = new Schema({
       value: { type: Schema.Types.Mixed }
     }],
     sku: { type: String },
-    price: { type: Number, required: true },
+    price: { type: Number, required: false, default: 0 },
     image: {
       id: { type: Number },
       src: { type: String }
@@ -59,38 +60,38 @@ const OrderSchema = new Schema({
   
   // Billing Address
   billingAddress: {
-    first_name: { type: String, required: true, default: 'Unknown' },
-    last_name: { type: String, required: true, default: 'Customer' },
+    first_name: { type: String, required: false, default: 'Unknown' },
+    last_name: { type: String, required: false, default: 'Customer' },
     company: { type: String, default: '' },
-    address_1: { type: String, required: true, default: 'Unknown Address' },
+    address_1: { type: String, required: false, default: 'Unknown Address' },
     address_2: { type: String, default: '' },
-    city: { type: String, required: true, default: 'Unknown City' },
-    state: { type: String, required: true, default: 'Unknown State' },
-    postcode: { type: String, required: true, default: '00000' },
-    country: { type: String, required: true, default: 'US' },
-    email: { type: String, required: true, default: 'unknown@example.com' },
+    city: { type: String, required: false, default: 'Unknown City' },
+    state: { type: String, required: false, default: 'Unknown State' },
+    postcode: { type: String, required: false, default: '00000' },
+    country: { type: String, required: false, default: 'US' },
+    email: { type: String, required: false, default: 'unknown@example.com' },
     phone: { type: String, default: '' }
   },
   
   // Shipping Address
   shippingAddress: {
-    first_name: { type: String, required: true, default: 'Unknown' },
-    last_name: { type: String, required: true, default: 'Customer' },
+    first_name: { type: String, required: false, default: 'Unknown' },
+    last_name: { type: String, required: false, default: 'Customer' },
     company: { type: String, default: '' },
-    address_1: { type: String, required: true, default: 'Unknown Address' },
+    address_1: { type: String, required: false, default: 'Unknown Address' },
     address_2: { type: String, default: '' },
-    city: { type: String, required: true, default: 'Unknown City' },
-    state: { type: String, required: true, default: 'Unknown State' },
-    postcode: { type: String, required: true, default: '00000' },
-    country: { type: String, required: true, default: 'US' }
+    city: { type: String, required: false, default: 'Unknown City' },
+    state: { type: String, required: false, default: 'Unknown State' },
+    postcode: { type: String, required: false, default: '00000' },
+    country: { type: String, required: false, default: 'US' }
   },
   
   // Order Key
-  orderKey: { type: String, required: true, unique: true },
+  orderKey: { type: String, required: false, unique: true },
   
   // Important Dates
-  dateCreated: { type: Date, required: true },
-  dateModified: { type: Date, required: true },
+  dateCreated: { type: Date, required: false },
+  dateModified: { type: Date, required: false },
   dateCompleted: { type: Date },
   datePaid: { type: Date },
   
