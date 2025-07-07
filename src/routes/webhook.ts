@@ -480,11 +480,36 @@ router.all('/simple-test', async (req: Request, res: Response) => {
   console.log('📍 Request IP:', req.ip);
   res.status(200).json({
     success: true,
-    message: 'WEBHOOK WORKING - Rate limiting completely disabled',
+    message: 'WEBHOOK WORKING - WordPress webhook_id support enabled',
     timestamp: new Date().toISOString(),
     method: req.method,
-    ip: req.ip
+    ip: req.ip,
+    version: '2.0 - WordPress compatible'
   });
+});
+
+// Test endpoint specifically for WordPress webhook format
+router.all('/wordpress-test', async (req: Request, res: Response) => {
+  console.log('🔧 WORDPRESS TEST ENDPOINT HIT');
+  console.log('📦 Body:', req.body);
+  console.log('📋 Content-Type:', req.headers['content-type']);
+  
+  if (req.body.webhook_id) {
+    res.status(200).json({
+      success: true,
+      message: 'WordPress webhook format detected and handled',
+      webhook_id: req.body.webhook_id,
+      timestamp: new Date().toISOString(),
+      note: 'This confirms WordPress webhook support is working'
+    });
+  } else {
+    res.status(200).json({
+      success: true,
+      message: 'Test endpoint - no webhook_id found',
+      body: req.body,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // GET endpoint to confirm webhooks are public
