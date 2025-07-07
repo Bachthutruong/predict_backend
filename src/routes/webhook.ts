@@ -70,7 +70,7 @@ const transformWooCommerceOrder = (wcOrder: any) => {
     paymentMethod: getValidValue(wcOrder.payment_method, 'unknown'),
     paymentMethodTitle: getValidValue(wcOrder.payment_method_title, 'Unknown Payment Method'),
     transactionId: getValidValue(wcOrder.transaction_id, ''),
-    lineItems: wcOrder.line_items || [],
+    lineItems: Array.isArray(wcOrder.line_items) ? wcOrder.line_items : [],
     billingAddress: {
       first_name: getValidValue(billing.first_name, 'Unknown'),
       last_name: getValidValue(billing.last_name, 'Customer'),
@@ -97,10 +97,10 @@ const transformWooCommerceOrder = (wcOrder: any) => {
     dateCompleted: wcOrder.date_completed ? new Date(wcOrder.date_completed) : undefined,
     datePaid: wcOrder.date_paid ? new Date(wcOrder.date_paid) : undefined,
     customerNote: getValidValue(wcOrder.customer_note, ''),
-    metaData: (wcOrder.meta_data || []).map((meta: any) => ({
-      key: meta.key,
-      value: meta.value
-    })),
+    metaData: Array.isArray(wcOrder.meta_data) ? wcOrder.meta_data.map((meta: any) => ({
+      key: meta?.key || '',
+      value: meta?.value || ''
+    })) : [],
     isProcessed: false
   };
 };
