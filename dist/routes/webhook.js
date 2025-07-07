@@ -41,11 +41,18 @@ const validateWebhookSignature = (req, res, next) => {
 const cleanEmptyStrings = (obj) => {
     if (typeof obj !== 'object' || obj === null)
         return obj;
+    // Don't process Date objects - return them as-is
+    if (obj instanceof Date)
+        return obj;
     const cleaned = Array.isArray(obj) ? [] : {};
     for (const [key, value] of Object.entries(obj)) {
         if (typeof value === 'string' && value === '') {
             // Skip empty strings - let MongoDB use defaults
             continue;
+        }
+        else if (value instanceof Date) {
+            // Preserve Date objects
+            cleaned[key] = value;
         }
         else if (typeof value === 'object' && value !== null) {
             cleaned[key] = cleanEmptyStrings(value);
