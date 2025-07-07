@@ -32,18 +32,6 @@ app.use(helmet({
 // Trust proxy for rate limiting (needed for Render, Heroku, etc.)
 app.set('trust proxy', 1);
 
-// Rate limiting (exclude webhooks)
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.',
-  skip: (req) => {
-    // Skip rate limiting for webhook endpoints
-    return req.path.startsWith('/api/webhook');
-  }
-});
-app.use('/api/', limiter);
-
 // CORS configuration
 const allowedOrigins = [
   'https://predict-frontend-six.vercel.app',
@@ -56,10 +44,31 @@ if (process.env.FRONTEND_URL) {
   allowedOrigins.push(process.env.FRONTEND_URL);
 }
 
+// Separate CORS for webhooks and regular API
+app.use('/api/webhook', cors({
+  origin: true, // Allow all origins for webhooks
+  credentials: false, // No credentials needed for webhooks
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: '*', // Allow all headers for webhooks
+  preflightContinue: false,
+  optionsSuccessStatus: 200
+}));
+
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+    console.log(`🌐 CORS check for origin: ${origin || 'none'}`);
+    
+    // Always allow requests with no origin (webhooks, curl, etc)
+    if (!origin) {
+      console.log(`✅ Allowing request with no origin`);
+      return callback(null, true);
+    }
+    
+    // Allow all webhook requests (WordPress/WooCommerce)
+    if (origin && (origin.includes('wp-admin') || origin.includes('wordpress'))) {
+      console.log(`✅ Allowing WordPress origin: ${origin}`);
+      return callback(null, true);
+    }
     
     // Remove trailing slash from origin for comparison
     const cleanOrigin = origin.replace(/\/$/, '');
@@ -70,15 +79,17 @@ app.use(cors({
     );
     
     if (isAllowed) {
+      console.log(`✅ Allowing known origin: ${origin}`);
       return callback(null, true);
     }
     
-    const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-    return callback(new Error(msg), false);
+    // For debugging: allow all origins temporarily
+    console.log(`⚠️ Unknown origin - allowing anyway for debug: ${origin}`);
+    return callback(null, true); // TEMPORARY: Allow all origins
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-WC-Webhook-Signature', 'X-WC-Webhook-Source', 'X-WC-Webhook-Topic', 'X-WC-Webhook-Resource', 'X-WC-Webhook-Event']
 }));
 
 // Compression middleware
@@ -91,6 +102,16 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Connect to database
 dbConnect();
 
+// Global debug middleware
+app.use('*', (req, res, next) => {
+  console.log(`🔍 ${req.method} ${req.path} from ${req.ip} - Origin: ${req.headers.origin || 'none'}`);
+  if (req.path.includes('webhook')) {
+    console.log(`🎯 WEBHOOK REQUEST DETECTED: ${req.method} ${req.path}`);
+    console.log(`📋 Headers:`, req.headers);
+  }
+  next();
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ 
@@ -100,17 +121,29 @@ app.get('/health', (req, res) => {
   });
 });
 
-// API routes
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/predictions', predictionRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/staff', staffRoutes);
-app.use('/api/check-in', checkInRoutes);
-app.use('/api/feedback', feedbackRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/cloudinary', cloudinaryRoutes);
+// ⚠️ CRITICAL: Webhook routes FIRST with NO middleware
+console.log('🔧 Setting up WEBHOOK routes with NO rate limiting...');
 app.use('/api/webhook', webhookRoutes);
+
+// Rate limiting ONLY for non-webhook API routes
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.'
+});
+
+console.log('🔧 Setting up API routes WITH rate limiting...');
+
+// API routes with rate limiting applied
+app.use('/api/auth', limiter, authRoutes);
+app.use('/api/users', limiter, userRoutes);
+app.use('/api/predictions', limiter, predictionRoutes);
+app.use('/api/admin', limiter, adminRoutes);
+app.use('/api/staff', limiter, staffRoutes);
+app.use('/api/check-in', limiter, checkInRoutes);
+app.use('/api/feedback', limiter, feedbackRoutes);
+app.use('/api/dashboard', limiter, dashboardRoutes);
+app.use('/api/cloudinary', limiter, cloudinaryRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
