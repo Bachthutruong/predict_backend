@@ -25,10 +25,10 @@ console.log('🔍 Webhook routes imported:', typeof webhookRoutes, webhookRoutes
 const app = express();
 const PORT = process.env.PORT || 5001;
 
-// Security middleware (temporarily disabled to debug)
-// app.use(helmet({
-//   crossOriginResourcePolicy: { policy: "cross-origin" }
-// }));
+// Security middleware
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 
 // Trust proxy for rate limiting (needed for Render, Heroku, etc.)
 // app.set('trust proxy', 1); // TEMPORARILY DISABLED while debugging
