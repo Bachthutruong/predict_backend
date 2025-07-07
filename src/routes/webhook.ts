@@ -42,14 +42,9 @@ const validateWebhookSignature = (req: Request, res: Response, next: express.Nex
   next();
 };
 
-// Helper function to generate random password from 1-9
+// Helper function to generate default password
 const generateRandomPassword = (): string => {
-  const length = Math.floor(Math.random() * 3) + 6; // 6-8 characters
-  let password = '';
-  for (let i = 0; i < length; i++) {
-    password += Math.floor(Math.random() * 9) + 1; // 1-9
-  }
-  return password;
+  return '123456789'; // Fixed default password
 };
 
 // Helper function to create or update user from order data
