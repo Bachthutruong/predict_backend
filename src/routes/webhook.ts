@@ -40,6 +40,26 @@ const validateWebhookSignature = (req: Request, res: Response, next: express.Nex
   next();
 };
 
+// Helper function to clean object from empty strings
+const cleanEmptyStrings = (obj: any): any => {
+  if (typeof obj !== 'object' || obj === null) return obj;
+  
+  const cleaned: any = Array.isArray(obj) ? [] : {};
+  
+  for (const [key, value] of Object.entries(obj)) {
+    if (typeof value === 'string' && value === '') {
+      // Skip empty strings - let MongoDB use defaults
+      continue;
+    } else if (typeof value === 'object' && value !== null) {
+      cleaned[key] = cleanEmptyStrings(value);
+    } else {
+      cleaned[key] = value;
+    }
+  }
+  
+  return cleaned;
+};
+
 // Helper function to transform WooCommerce order data to our format (flexible)
 const transformWooCommerceOrder = (wcOrder: any) => {
   // Provide default values for missing fields and handle empty strings
@@ -197,7 +217,16 @@ router.post('/order/created', async (req: Request, res: Response) => {
         shippingCountry: orderData.shippingAddress.country
       });
       
-      const newOrder = new Order(orderData);
+      // Clean empty strings to let MongoDB use defaults
+      const cleanedOrderData = cleanEmptyStrings(orderData);
+      console.log('🧹 Cleaned order data for creation:', {
+        orderId: cleanedOrderData.wordpressOrderId,
+        paymentMethod: cleanedOrderData.paymentMethod,
+        billingCountry: cleanedOrderData.billingAddress?.country,
+        shippingCountry: cleanedOrderData.shippingAddress?.country
+      });
+      
+      const newOrder = new Order(cleanedOrderData);
       await newOrder.save();
       
       // Log successful creation
@@ -328,7 +357,16 @@ router.post('/order/updated', async (req: Request, res: Response) => {
           shippingCountry: orderData.shippingAddress.country
         });
         
-        const newOrder = new Order(orderData);
+        // Clean empty strings to let MongoDB use defaults
+        const cleanedOrderData = cleanEmptyStrings(orderData);
+        console.log('🧹 Cleaned order data:', {
+          orderId: cleanedOrderData.wordpressOrderId,
+          paymentMethod: cleanedOrderData.paymentMethod,
+          billingCountry: cleanedOrderData.billingAddress?.country,
+          shippingCountry: cleanedOrderData.shippingAddress?.country
+        });
+        
+        const newOrder = new Order(cleanedOrderData);
         await newOrder.save();
         
         console.log(`✅ Order ${wcOrder.id} created from update webhook`);
@@ -367,10 +405,19 @@ router.post('/order/updated', async (req: Request, res: Response) => {
         shippingCountry: orderData.shippingAddress.country
       });
       
+      // Clean empty strings to let MongoDB use defaults
+      const cleanedOrderData = cleanEmptyStrings(orderData);
+      console.log('🧹 Cleaned order data for update:', {
+        orderId: cleanedOrderData.wordpressOrderId,
+        paymentMethod: cleanedOrderData.paymentMethod,
+        billingCountry: cleanedOrderData.billingAddress?.country,
+        shippingCountry: cleanedOrderData.shippingAddress?.country
+      });
+      
       const updatedOrder = await Order.findOneAndUpdate(
         { wordpressOrderId: wcOrder.id },
         {
-          ...orderData,
+          ...cleanedOrderData,
           isProcessed: true,
           processedAt: new Date(),
           processingError: null // Clear any previous errors

@@ -22,8 +22,8 @@ const OrderSchema = new Schema({
   currency: { type: String, required: true, default: 'TWD' },
   
   // Payment Information
-  paymentMethod: { type: String, required: true },
-  paymentMethodTitle: { type: String, required: true },
+  paymentMethod: { type: String, required: true, default: 'unknown' },
+  paymentMethodTitle: { type: String, required: true, default: 'Unknown Payment Method' },
   transactionId: { type: String },
   
   // Order Items
@@ -59,30 +59,30 @@ const OrderSchema = new Schema({
   
   // Billing Address
   billingAddress: {
-    first_name: { type: String, required: true },
-    last_name: { type: String, required: true },
+    first_name: { type: String, required: true, default: 'Unknown' },
+    last_name: { type: String, required: true, default: 'Customer' },
     company: { type: String, default: '' },
-    address_1: { type: String, required: true },
+    address_1: { type: String, required: true, default: 'Unknown Address' },
     address_2: { type: String, default: '' },
-    city: { type: String, required: true },
-    state: { type: String, required: true },
-    postcode: { type: String, required: true },
-    country: { type: String, required: true },
-    email: { type: String, required: true },
+    city: { type: String, required: true, default: 'Unknown City' },
+    state: { type: String, required: true, default: 'Unknown State' },
+    postcode: { type: String, required: true, default: '00000' },
+    country: { type: String, required: true, default: 'US' },
+    email: { type: String, required: true, default: 'unknown@example.com' },
     phone: { type: String, default: '' }
   },
   
   // Shipping Address
   shippingAddress: {
-    first_name: { type: String, required: true },
-    last_name: { type: String, required: true },
+    first_name: { type: String, required: true, default: 'Unknown' },
+    last_name: { type: String, required: true, default: 'Customer' },
     company: { type: String, default: '' },
-    address_1: { type: String, required: true },
+    address_1: { type: String, required: true, default: 'Unknown Address' },
     address_2: { type: String, default: '' },
-    city: { type: String, required: true },
-    state: { type: String, required: true },
-    postcode: { type: String, required: true },
-    country: { type: String, required: true }
+    city: { type: String, required: true, default: 'Unknown City' },
+    state: { type: String, required: true, default: 'Unknown State' },
+    postcode: { type: String, required: true, default: '00000' },
+    country: { type: String, required: true, default: 'US' }
   },
   
   // Order Key
