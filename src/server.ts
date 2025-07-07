@@ -6,7 +6,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
-// import rateLimit from 'express-rate-limit'; // TEMPORARILY DISABLED
+// Rate limiting completely removed from dependencies
 import dbConnect from './config/database';
 
 // Import routes
@@ -25,10 +25,10 @@ console.log('🔍 Webhook routes imported:', typeof webhookRoutes, webhookRoutes
 const app = express();
 const PORT = process.env.PORT || 5001;
 
-// Security middleware
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" }
-}));
+// Security middleware (temporarily disabled to debug)
+// app.use(helmet({
+//   crossOriginResourcePolicy: { policy: "cross-origin" }
+// }));
 
 // Trust proxy for rate limiting (needed for Render, Heroku, etc.)
 // app.set('trust proxy', 1); // TEMPORARILY DISABLED while debugging
@@ -152,14 +152,9 @@ app.use('/api/webhook',
   webhookRoutes
 );
 
-// TEMPORARILY DISABLED: Rate limiting to debug webhook issues
-// const limiter = rateLimit({
-//   windowMs: 15 * 60 * 1000, // 15 minutes
-//   max: 100, // limit each IP to 100 requests per windowMs
-//   message: 'Too many requests from this IP, please try again later.'
-// });
+// Rate limiting completely removed from project
 
-console.log('🔧 Setting up API routes WITHOUT rate limiting (temporarily disabled)...');
+console.log('🔧 Setting up API routes WITHOUT rate limiting (permanently removed)...');
 
 // API routes WITHOUT rate limiting (temporarily disabled)
 app.use('/api/auth', authRoutes);
