@@ -7,7 +7,7 @@ const OrderSchema = new mongoose_1.Schema({
     // Order Status
     status: {
         type: String,
-        enum: ['pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed', 'trash', 'ecpay-shipping'],
+        enum: ['pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed', 'trash', 'ecpay-shipping', 'ecpay'],
         required: false,
         index: true,
         default: 'pending'

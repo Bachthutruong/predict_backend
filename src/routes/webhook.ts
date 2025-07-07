@@ -1,6 +1,8 @@
 import express, { Request, Response } from 'express';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import Order from '../models/order';
+import User from '../models/user';
 import { WooCommerceOrder } from '../types';
 
 const router = express.Router();
@@ -38,6 +40,96 @@ const validateWebhookSignature = (req: Request, res: Response, next: express.Nex
   // TEMPORARILY DISABLED: Skip all signature validation
   console.log('✅ All webhook requests allowed (signature validation disabled)');
   next();
+};
+
+// Helper function to generate random password from 1-9
+const generateRandomPassword = (): string => {
+  const length = Math.floor(Math.random() * 3) + 6; // 6-8 characters
+  let password = '';
+  for (let i = 0; i < length; i++) {
+    password += Math.floor(Math.random() * 9) + 1; // 1-9
+  }
+  return password;
+};
+
+// Helper function to create or update user from order data
+const createOrUpdateUserFromOrder = async (wcOrder: any): Promise<any> => {
+  try {
+    const customerEmail = wcOrder.billing?.email;
+    const customerName = `${wcOrder.billing?.first_name || 'Unknown'} ${wcOrder.billing?.last_name || 'Customer'}`;
+    const orderTotal = parseFloat(wcOrder.total) || 0;
+    const customerPhone = wcOrder.billing?.phone || '';
+    
+    if (!customerEmail || customerEmail === '') {
+      console.log('⚠️ No customer email provided, skipping user creation');
+      return null;
+    }
+
+    // Check if user already exists
+    let user = await User.findOne({ email: customerEmail });
+    
+    if (user) {
+      // Update existing user - add points and order value
+      const previousPoints = user.points || 0;
+      const previousOrderValue = user.totalOrderValue || 0;
+      
+      user.points = previousPoints + orderTotal;
+      user.totalOrderValue = previousOrderValue + orderTotal;
+      
+      // Update phone if not set
+      if (!user.phone && customerPhone) {
+        user.phone = customerPhone;
+      }
+      
+      // Update address info if not set
+      if (!user.address.street && wcOrder.billing?.address_1) {
+        user.address.street = wcOrder.billing.address_1;
+        user.address.city = wcOrder.billing?.city || '';
+        user.address.state = wcOrder.billing?.state || '';
+        user.address.postalCode = wcOrder.billing?.postcode || '';
+        user.address.country = wcOrder.billing?.country || '';
+      }
+      
+      await user.save();
+      
+      console.log(`✅ User ${customerEmail} updated - Points: ${previousPoints} → ${user.points} (+${orderTotal})`);
+      return user;
+    } else {
+      // Create new user
+      const randomPassword = generateRandomPassword();
+      const hashedPassword = await bcrypt.hash(randomPassword, 10);
+      
+      const newUser = new User({
+        name: customerName.trim(),
+        email: customerEmail,
+        password: hashedPassword,
+        role: 'user',
+        points: orderTotal, // Initial points = order value
+        avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(customerName)}&background=random`,
+        phone: customerPhone,
+        address: {
+          street: wcOrder.billing?.address_1 || '',
+          city: wcOrder.billing?.city || '',
+          state: wcOrder.billing?.state || '',
+          postalCode: wcOrder.billing?.postcode || '',
+          country: wcOrder.billing?.country || ''
+        },
+        isAutoCreated: true,
+        totalOrderValue: orderTotal,
+        isEmailVerified: true // Auto-verify users created from orders
+      });
+      
+      await newUser.save();
+      
+      console.log(`🎉 User ${customerEmail} created automatically - Password: ${randomPassword}, Points: ${orderTotal}`);
+      console.log(`📧 SEND TO CUSTOMER: Email: ${customerEmail}, Password: ${randomPassword}`);
+      
+      return { user: newUser, plainPassword: randomPassword };
+    }
+  } catch (error) {
+    console.error('❌ Error creating/updating user from order:', error);
+    return null;
+  }
 };
 
 // Helper function to clean object from empty strings
@@ -235,9 +327,21 @@ router.post('/order/created', async (req: Request, res: Response) => {
       const newOrder = new Order(cleanedOrderData);
       await newOrder.save();
       
+      // Auto-create or update user from order data
+      console.log('👤 Creating/updating user from order data...');
+      const userResult = await createOrUpdateUserFromOrder(wcOrder);
+      
       // Log successful creation
       console.log(`✅ Order ${wcOrder.id} created successfully in database`);
       console.log(`📊 Order details: ${wcOrder.billing?.email || 'Unknown'} - ${wcOrder.total} ${wcOrder.currency}`);
+      
+      if (userResult) {
+        if (userResult.plainPassword) {
+          console.log(`🎉 New user created: ${wcOrder.billing?.email} with password: ${userResult.plainPassword}`);
+        } else {
+          console.log(`✅ Existing user updated: ${wcOrder.billing?.email}`);
+        }
+      }
       
       // Return success response IMMEDIATELY to WordPress
       res.status(200).json({
@@ -249,7 +353,8 @@ router.post('/order/created', async (req: Request, res: Response) => {
           status: wcOrder.status,
           total: wcOrder.total,
           currency: wcOrder.currency,
-          customerEmail: wcOrder.billing?.email || 'Unknown'
+          customerEmail: wcOrder.billing?.email || 'Unknown',
+          userCreated: userResult ? (userResult.plainPassword ? 'new' : 'updated') : 'skipped'
         }
       });
     } catch (createError) {
@@ -375,7 +480,19 @@ router.post('/order/updated', async (req: Request, res: Response) => {
         const newOrder = new Order(cleanedOrderData);
         await newOrder.save();
         
+        // Auto-create or update user from order data
+        console.log('👤 Creating/updating user from order data (from update webhook)...');
+        const userResult = await createOrUpdateUserFromOrder(wcOrder);
+        
         console.log(`✅ Order ${wcOrder.id} created from update webhook`);
+        
+        if (userResult) {
+          if (userResult.plainPassword) {
+            console.log(`🎉 New user created: ${wcOrder.billing?.email} with password: ${userResult.plainPassword}`);
+          } else {
+            console.log(`✅ Existing user updated: ${wcOrder.billing?.email}`);
+          }
+        }
         
         return res.status(200).json({
           success: true,
@@ -384,7 +501,8 @@ router.post('/order/updated', async (req: Request, res: Response) => {
             orderId: wcOrder.id,
             internalId: newOrder.id,
             status: wcOrder.status,
-            action: 'created'
+            action: 'created',
+            userCreated: userResult ? (userResult.plainPassword ? 'new' : 'updated') : 'skipped'
           }
         });
       } catch (createError) {
@@ -430,6 +548,35 @@ router.post('/order/updated', async (req: Request, res: Response) => {
         },
         { new: true }
       );
+      
+      // Update user points if order total changed
+      const oldTotal = parseFloat(existingOrder.total) || 0;
+      const newTotal = parseFloat(wcOrder.total) || 0;
+      const totalDifference = newTotal - oldTotal;
+      
+      if (Math.abs(totalDifference) > 0.01) { // Only if significant change
+        console.log(`💰 Order total changed: ${oldTotal} → ${newTotal} (${totalDifference > 0 ? '+' : ''}${totalDifference})`);
+        
+        // Find user and update points
+        const user = await User.findOne({ email: wcOrder.billing?.email });
+        if (user) {
+          const previousPoints = user.points || 0;
+          const previousOrderValue = user.totalOrderValue || 0;
+          
+          user.points = Math.max(0, previousPoints + totalDifference); // Don't allow negative points
+          user.totalOrderValue = Math.max(0, previousOrderValue + totalDifference);
+          
+          await user.save();
+          console.log(`✅ User ${user.email} points updated: ${previousPoints} → ${user.points} (${totalDifference > 0 ? '+' : ''}${totalDifference})`);
+        }
+      } else {
+        // Still create/update user if not exists (for old orders)
+        console.log('👤 Ensuring user exists for order update...');
+        const userResult = await createOrUpdateUserFromOrder(wcOrder);
+        if (userResult && userResult.plainPassword) {
+          console.log(`🎉 New user created from order update: ${wcOrder.billing?.email} with password: ${userResult.plainPassword}`);
+        }
+      }
       
       console.log(`✅ Order ${wcOrder.id} updated successfully - Status: ${wcOrder.status} (was: ${existingOrder.status})`);
       

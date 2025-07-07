@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const auth_1 = require("../middleware/auth");
 const user_1 = __importDefault(require("../models/user"));
 const point_transaction_1 = __importDefault(require("../models/point-transaction"));
@@ -40,8 +41,40 @@ router.get('/profile', auth_1.authMiddleware, async (req, res) => {
 // Update user profile
 router.put('/profile', auth_1.authMiddleware, async (req, res) => {
     try {
-        const { name, avatarUrl } = req.body;
-        const user = await user_1.default.findByIdAndUpdate(req.user.id, { name, avatarUrl }, { new: true });
+        const { name, avatarUrl, phone, dateOfBirth, gender, address } = req.body;
+        const updateData = {};
+        // Only update fields that are provided
+        if (name !== undefined)
+            updateData.name = name;
+        if (avatarUrl !== undefined)
+            updateData.avatarUrl = avatarUrl;
+        if (phone !== undefined)
+            updateData.phone = phone;
+        if (dateOfBirth !== undefined)
+            updateData.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : null;
+        if (gender !== undefined)
+            updateData.gender = gender;
+        // Handle address object
+        if (address && typeof address === 'object') {
+            updateData.address = {};
+            if (address.street !== undefined)
+                updateData.address.street = address.street;
+            if (address.city !== undefined)
+                updateData.address.city = address.city;
+            if (address.state !== undefined)
+                updateData.address.state = address.state;
+            if (address.postalCode !== undefined)
+                updateData.address.postalCode = address.postalCode;
+            if (address.country !== undefined)
+                updateData.address.country = address.country;
+        }
+        const user = await user_1.default.findByIdAndUpdate(req.user.id, updateData, { new: true });
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
         // Transform the data to match frontend expectations
         const transformedUser = {
             ...user.toObject(),
@@ -55,6 +88,69 @@ router.put('/profile', auth_1.authMiddleware, async (req, res) => {
     }
     catch (error) {
         console.error('Update profile error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error'
+        });
+    }
+});
+// Change user password
+router.put('/profile/password', auth_1.authMiddleware, async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+        // Validate input
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'Current password and new password are required'
+            });
+        }
+        if (newPassword.length < 6) {
+            return res.status(400).json({
+                success: false,
+                message: 'New password must be at least 6 characters long'
+            });
+        }
+        // Get user with password
+        const user = await user_1.default.findById(req.user.id).select('+password');
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+        // Check if user was auto-created (might have random password)
+        let isCurrentPasswordValid = false;
+        if (user.isAutoCreated && currentPassword === 'auto-created') {
+            // Allow special bypass for auto-created users
+            isCurrentPasswordValid = true;
+            console.log(`🔑 Auto-created user ${user.email} changing password for first time`);
+        }
+        else {
+            // Verify current password
+            isCurrentPasswordValid = await bcryptjs_1.default.compare(currentPassword, user.password);
+        }
+        if (!isCurrentPasswordValid) {
+            return res.status(400).json({
+                success: false,
+                message: 'Current password is incorrect'
+            });
+        }
+        // Hash new password
+        const hashedNewPassword = await bcryptjs_1.default.hash(newPassword, 10);
+        // Update password and mark as no longer auto-created
+        await user_1.default.findByIdAndUpdate(req.user.id, {
+            password: hashedNewPassword,
+            isAutoCreated: false // User has now set their own password
+        });
+        console.log(`✅ User ${user.email} changed password successfully`);
+        res.json({
+            success: true,
+            message: 'Password changed successfully'
+        });
+    }
+    catch (error) {
+        console.error('Change password error:', error);
         res.status(500).json({
             success: false,
             message: 'Server error'

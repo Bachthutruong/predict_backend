@@ -18,6 +18,21 @@ const UserSchema = new mongoose_1.Schema({
     consecutiveCheckIns: { type: Number, default: 0, index: true },
     lastCheckInDate: { type: Date, index: true },
     totalSuccessfulReferrals: { type: Number, default: 0 },
+    // Personal Information for Profile
+    phone: { type: String, default: '' },
+    dateOfBirth: { type: Date },
+    gender: { type: String, enum: ['male', 'female', 'other', 'prefer-not-to-say', ''], default: '' },
+    address: {
+        street: { type: String, default: '' },
+        city: { type: String, default: '' },
+        state: { type: String, default: '' },
+        postalCode: { type: String, default: '' },
+        country: { type: String, default: '' }
+    },
+    // Account Status
+    isAutoCreated: { type: Boolean, default: false }, // Track if created from order webhook
+    lastLogin: { type: Date },
+    totalOrderValue: { type: Number, default: 0 }, // Total value of all orders
 }, { timestamps: true });
 // Compound indexes for better query performance
 UserSchema.index({ email: 1, isEmailVerified: 1 });
