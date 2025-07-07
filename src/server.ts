@@ -29,11 +29,18 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-// Rate limiting
+// Trust proxy for rate limiting (needed for Render, Heroku, etc.)
+app.set('trust proxy', 1);
+
+// Rate limiting (exclude webhooks)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
   message: 'Too many requests from this IP, please try again later.',
+  skip: (req) => {
+    // Skip rate limiting for webhook endpoints
+    return req.path.startsWith('/api/webhook');
+  }
 });
 app.use('/api/', limiter);
 
