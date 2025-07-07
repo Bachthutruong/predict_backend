@@ -47,8 +47,28 @@ const generateRandomPassword = (): string => {
   return '123456789'; // Fixed default password
 };
 
+// Helper function to recalculate user points from all orders
+const recalculateUserPointsFromOrders = async (customerEmail: string): Promise<number> => {
+  try {
+    // Get all orders for this customer
+    const orders = await Order.find({ customerEmail });
+    
+    // Calculate total points from all orders
+    let totalPoints = 0;
+    for (const order of orders) {
+      const orderValue = parseFloat(order.total) || 0;
+      totalPoints += orderValue;
+    }
+    
+    return totalPoints;
+  } catch (error) {
+    console.error('❌ Error recalculating points:', error);
+    return 0;
+  }
+};
+
 // Helper function to create or update user from order data
-const createOrUpdateUserFromOrder = async (wcOrder: any): Promise<any> => {
+const createOrUpdateUserFromOrder = async (wcOrder: any, isNewOrder: boolean = true): Promise<any> => {
   try {
     const customerEmail = wcOrder.billing?.email;
     const customerName = `${wcOrder.billing?.first_name || 'Unknown'} ${wcOrder.billing?.last_name || 'Customer'}`;
@@ -64,12 +84,25 @@ const createOrUpdateUserFromOrder = async (wcOrder: any): Promise<any> => {
     let user = await User.findOne({ email: customerEmail });
     
     if (user) {
-      // Update existing user - add points and order value
-      const previousPoints = user.points || 0;
-      const previousOrderValue = user.totalOrderValue || 0;
-      
-      user.points = previousPoints + orderTotal;
-      user.totalOrderValue = previousOrderValue + orderTotal;
+      if (isNewOrder) {
+        // New order: Add points
+        const previousPoints = user.points || 0;
+        const previousOrderValue = user.totalOrderValue || 0;
+        
+        user.points = previousPoints + orderTotal;
+        user.totalOrderValue = previousOrderValue + orderTotal;
+        
+        console.log(`✅ User ${customerEmail} - NEW ORDER - Points: ${previousPoints} → ${user.points} (+${orderTotal})`);
+      } else {
+        // Updated order: Recalculate total points from all orders
+        const newTotalPoints = await recalculateUserPointsFromOrders(customerEmail);
+        const previousPoints = user.points || 0;
+        
+        user.points = newTotalPoints;
+        user.totalOrderValue = newTotalPoints; // Keep in sync
+        
+        console.log(`✅ User ${customerEmail} - ORDER UPDATED - Points recalculated: ${previousPoints} → ${newTotalPoints}`);
+      }
       
       // Update phone if not set
       if (!user.phone && customerPhone) {
@@ -86,8 +119,6 @@ const createOrUpdateUserFromOrder = async (wcOrder: any): Promise<any> => {
       }
       
       await user.save();
-      
-      console.log(`✅ User ${customerEmail} updated - Points: ${previousPoints} → ${user.points} (+${orderTotal})`);
       return user;
     } else {
       // Create new user
@@ -322,9 +353,9 @@ router.post('/order/created', async (req: Request, res: Response) => {
       const newOrder = new Order(cleanedOrderData);
       await newOrder.save();
       
-      // Auto-create or update user from order data
-      console.log('👤 Creating/updating user from order data...');
-      const userResult = await createOrUpdateUserFromOrder(wcOrder);
+      // Auto-create or update user from order data (NEW ORDER)
+      console.log('👤 Creating/updating user from NEW order data...');
+      const userResult = await createOrUpdateUserFromOrder(wcOrder, true);
       
       // Log successful creation
       console.log(`✅ Order ${wcOrder.id} created successfully in database`);
@@ -475,9 +506,9 @@ router.post('/order/updated', async (req: Request, res: Response) => {
         const newOrder = new Order(cleanedOrderData);
         await newOrder.save();
         
-        // Auto-create or update user from order data
-        console.log('👤 Creating/updating user from order data (from update webhook)...');
-        const userResult = await createOrUpdateUserFromOrder(wcOrder);
+        // Auto-create or update user from order data (NEW ORDER from update webhook)
+        console.log('👤 Creating/updating user from NEW order data (from update webhook)...');
+        const userResult = await createOrUpdateUserFromOrder(wcOrder, true);
         
         console.log(`✅ Order ${wcOrder.id} created from update webhook`);
         
@@ -544,33 +575,12 @@ router.post('/order/updated', async (req: Request, res: Response) => {
         { new: true }
       );
       
-      // Update user points if order total changed
-      const oldTotal = parseFloat(existingOrder.total) || 0;
-      const newTotal = parseFloat(wcOrder.total) || 0;
-      const totalDifference = newTotal - oldTotal;
+      // Update user points based on all orders (UPDATED ORDER)
+      console.log('👤 Recalculating user points from UPDATED order...');
+      const userResult = await createOrUpdateUserFromOrder(wcOrder, false);
       
-      if (Math.abs(totalDifference) > 0.01) { // Only if significant change
-        console.log(`💰 Order total changed: ${oldTotal} → ${newTotal} (${totalDifference > 0 ? '+' : ''}${totalDifference})`);
-        
-        // Find user and update points
-        const user = await User.findOne({ email: wcOrder.billing?.email });
-        if (user) {
-          const previousPoints = user.points || 0;
-          const previousOrderValue = user.totalOrderValue || 0;
-          
-          user.points = Math.max(0, previousPoints + totalDifference); // Don't allow negative points
-          user.totalOrderValue = Math.max(0, previousOrderValue + totalDifference);
-          
-          await user.save();
-          console.log(`✅ User ${user.email} points updated: ${previousPoints} → ${user.points} (${totalDifference > 0 ? '+' : ''}${totalDifference})`);
-        }
-      } else {
-        // Still create/update user if not exists (for old orders)
-        console.log('👤 Ensuring user exists for order update...');
-        const userResult = await createOrUpdateUserFromOrder(wcOrder);
-        if (userResult && userResult.plainPassword) {
-          console.log(`🎉 New user created from order update: ${wcOrder.billing?.email} with password: ${userResult.plainPassword}`);
-        }
+      if (userResult && userResult.plainPassword) {
+        console.log(`🎉 New user created from order update: ${wcOrder.billing?.email} with password: ${userResult.plainPassword}`);
       }
       
       console.log(`✅ Order ${wcOrder.id} updated successfully - Status: ${wcOrder.status} (was: ${existingOrder.status})`);
