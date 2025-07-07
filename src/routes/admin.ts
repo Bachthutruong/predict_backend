@@ -6,6 +6,7 @@ import Feedback from '../models/feedback';
 import Question from '../models/question';
 import PointTransaction from '../models/point-transaction';
 import UserPrediction from '../models/user-prediction';
+import Order from '../models/order';
 
 const router = express.Router();
 
@@ -795,6 +796,172 @@ router.delete('/staff/:id', async (req: AuthRequest, res) => {
     });
   } catch (error) {
     console.error('Delete staff error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// Get all orders
+router.get('/orders', async (req, res) => {
+  try {
+    const { status, page = 1, limit = 20, search } = req.query;
+    
+    const query: any = {};
+    if (status) {
+      query.status = status;
+    }
+    if (search) {
+      query.$or = [
+        { customerEmail: { $regex: search, $options: 'i' } },
+        { customerName: { $regex: search, $options: 'i' } },
+        { wordpressOrderId: search }
+      ];
+    }
+
+    const orders = await Order.find(query)
+      .sort({ createdAt: -1 })
+      .limit(Number(limit))
+      .skip((Number(page) - 1) * Number(limit));
+
+    const total = await Order.countDocuments(query);
+
+    res.json({
+      success: true,
+      data: {
+        orders,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          pages: Math.ceil(total / Number(limit))
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get orders error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// Get order by ID
+router.get('/orders/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: order
+    });
+  } catch (error) {
+    console.error('Get order error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// Get orders statistics
+router.get('/orders/stats/overview', async (req, res) => {
+  try {
+    const [
+      totalOrders,
+      pendingOrders,
+      processingOrders,
+      completedOrders,
+      cancelledOrders,
+      totalRevenue
+    ] = await Promise.all([
+      Order.countDocuments(),
+      Order.countDocuments({ status: 'pending' }),
+      Order.countDocuments({ status: 'processing' }),
+      Order.countDocuments({ status: 'completed' }),
+      Order.countDocuments({ status: 'cancelled' }),
+      Order.aggregate([
+        { $match: { status: 'completed' } },
+        { $group: { _id: null, total: { $sum: { $toDouble: '$total' } } } }
+      ]).then(result => result[0]?.total || 0)
+    ]);
+
+    const recentOrders = await Order.find()
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select('wordpressOrderId customerName customerEmail status total currency createdAt');
+
+    res.json({
+      success: true,
+      data: {
+        stats: {
+          totalOrders,
+          pendingOrders,
+          processingOrders,
+          completedOrders,
+          cancelledOrders,
+          totalRevenue
+        },
+        recentOrders
+      }
+    });
+  } catch (error) {
+    console.error('Get orders stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// Update order status (for internal use)
+router.patch('/orders/:id/status', async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { status, notes } = req.body;
+
+    const validStatuses = ['pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status'
+      });
+    }
+
+    const order = await Order.findByIdAndUpdate(
+      id,
+      { 
+        status,
+        dateModified: new Date(),
+        ...(notes && { processingError: notes })
+      },
+      { new: true }
+    );
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: order,
+      message: `Order status updated to ${status}`
+    });
+  } catch (error) {
+    console.error('Update order status error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
