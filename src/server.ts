@@ -92,6 +92,23 @@ app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Special middleware for webhooks to handle both JSON and form data
+app.use('/api/webhook', (req, res, next) => {
+  console.log('🔍 Webhook Body Parser:', {
+    contentType: req.headers['content-type'],
+    bodyType: typeof req.body,
+    bodyKeys: Object.keys(req.body || {}),
+    rawBody: req.body
+  });
+  
+  // If it's form data, try to parse it
+  if (req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
+    console.log('📝 Form data detected, body:', req.body);
+  }
+  
+  next();
+});
+
 // Connect to database
 dbConnect();
 
