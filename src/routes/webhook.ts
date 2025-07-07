@@ -46,9 +46,15 @@ const transformWooCommerceOrder = (wcOrder: any) => {
   const billing = wcOrder.billing || {};
   const shipping = wcOrder.shipping || {};
   
-  // Helper function to handle empty strings
+  // Helper function to handle empty strings and ensure non-empty values
   const getValidValue = (value: any, defaultValue: string) => {
-    return (value && value !== '') ? value : defaultValue;
+    return (value && value !== '' && value !== null && value !== undefined) ? String(value).trim() : defaultValue;
+  };
+  
+  // Helper function to ensure non-empty required field
+  const getRequiredValue = (value: any, defaultValue: string) => {
+    const cleanValue = getValidValue(value, defaultValue);
+    return cleanValue || defaultValue; // Double check to ensure never empty
   };
   
   console.log('🔍 Transform order data:', {
@@ -67,33 +73,37 @@ const transformWooCommerceOrder = (wcOrder: any) => {
     customerPhone: getValidValue(billing.phone, ''),
     total: getValidValue(wcOrder.total, '0.00'),
     currency: getValidValue(wcOrder.currency, 'USD'),
-    paymentMethod: getValidValue(wcOrder.payment_method, 'unknown'),
-    paymentMethodTitle: getValidValue(wcOrder.payment_method_title, 'Unknown Payment Method'),
+    paymentMethod: getRequiredValue(wcOrder.payment_method, 'unknown'),
+    paymentMethodTitle: getRequiredValue(wcOrder.payment_method_title, 'Unknown Payment Method'),
     transactionId: getValidValue(wcOrder.transaction_id, ''),
     lineItems: Array.isArray(wcOrder.line_items) ? wcOrder.line_items : [],
     billingAddress: {
-      first_name: getValidValue(billing.first_name, 'Unknown'),
-      last_name: getValidValue(billing.last_name, 'Customer'),
-      address_1: getValidValue(billing.address_1, 'Unknown Address'),
-      city: getValidValue(billing.city, 'Unknown City'),
-      state: getValidValue(billing.state, 'Unknown State'),
-      postcode: getValidValue(billing.postcode, '00000'),
-      country: getValidValue(billing.country, 'US'),
-      email: getValidValue(billing.email, 'unknown@example.com'),
+      first_name: getRequiredValue(billing.first_name, 'Unknown'),
+      last_name: getRequiredValue(billing.last_name, 'Customer'),
+      address_1: getRequiredValue(billing.address_1, 'Unknown Address'),
+      city: getRequiredValue(billing.city, 'Unknown City'),
+      state: getRequiredValue(billing.state, 'Unknown State'),
+      postcode: getRequiredValue(billing.postcode, '00000'),
+      country: getRequiredValue(billing.country, 'US'),
+      email: getRequiredValue(billing.email, 'unknown@example.com'),
       phone: getValidValue(billing.phone, '')
     },
     shippingAddress: {
-      first_name: getValidValue(shipping.first_name, getValidValue(billing.first_name, 'Unknown')),
-      last_name: getValidValue(shipping.last_name, getValidValue(billing.last_name, 'Customer')),
-      address_1: getValidValue(shipping.address_1, getValidValue(billing.address_1, 'Unknown Address')),
-      city: getValidValue(shipping.city, getValidValue(billing.city, 'Unknown City')),
-      state: getValidValue(shipping.state, getValidValue(billing.state, 'Unknown State')),
-      postcode: getValidValue(shipping.postcode, getValidValue(billing.postcode, '00000')),
-      country: getValidValue(shipping.country, getValidValue(billing.country, 'US'))
+      first_name: getRequiredValue(shipping.first_name, getRequiredValue(billing.first_name, 'Unknown')),
+      last_name: getRequiredValue(shipping.last_name, getRequiredValue(billing.last_name, 'Customer')),
+      address_1: getRequiredValue(shipping.address_1, getRequiredValue(billing.address_1, 'Unknown Address')),
+      city: getRequiredValue(shipping.city, getRequiredValue(billing.city, 'Unknown City')),
+      state: getRequiredValue(shipping.state, getRequiredValue(billing.state, 'Unknown State')),
+      postcode: getRequiredValue(shipping.postcode, getRequiredValue(billing.postcode, '00000')),
+      country: getRequiredValue(shipping.country, getRequiredValue(billing.country, 'US'))
     },
-    orderKey: getValidValue(wcOrder.order_key, `wc_order_${Date.now()}`),
-    dateCreated: wcOrder.date_created ? new Date(wcOrder.date_created) : new Date(),
-    dateModified: wcOrder.date_modified ? new Date(wcOrder.date_modified) : new Date(),
+    orderKey: getRequiredValue(wcOrder.order_key, `wc_order_${wcOrder.id}_${Date.now()}`),
+    dateCreated: wcOrder.date_created && !isNaN(new Date(wcOrder.date_created).getTime()) 
+      ? new Date(wcOrder.date_created) 
+      : new Date(),
+    dateModified: wcOrder.date_modified && !isNaN(new Date(wcOrder.date_modified).getTime()) 
+      ? new Date(wcOrder.date_modified) 
+      : new Date(),
     dateCompleted: wcOrder.date_completed ? new Date(wcOrder.date_completed) : undefined,
     datePaid: wcOrder.date_paid ? new Date(wcOrder.date_paid) : undefined,
     customerNote: getValidValue(wcOrder.customer_note, ''),
