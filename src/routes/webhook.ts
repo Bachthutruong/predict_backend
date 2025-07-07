@@ -42,48 +42,61 @@ const validateWebhookSignature = (req: Request, res: Response, next: express.Nex
 
 // Helper function to transform WooCommerce order data to our format (flexible)
 const transformWooCommerceOrder = (wcOrder: any) => {
-  // Provide default values for missing fields
+  // Provide default values for missing fields and handle empty strings
   const billing = wcOrder.billing || {};
   const shipping = wcOrder.shipping || {};
   
+  // Helper function to handle empty strings
+  const getValidValue = (value: any, defaultValue: string) => {
+    return (value && value !== '') ? value : defaultValue;
+  };
+  
+  console.log('🔍 Transform order data:', {
+    orderId: wcOrder.id,
+    paymentMethod: wcOrder.payment_method,
+    paymentMethodTitle: wcOrder.payment_method_title,
+    billingCountry: billing.country,
+    shippingCountry: shipping.country
+  });
+  
   return {
     wordpressOrderId: wcOrder.id,
-    status: wcOrder.status || 'pending',
-    customerEmail: billing.email || 'unknown@example.com',
-    customerName: `${billing.first_name || 'Unknown'} ${billing.last_name || 'Customer'}`,
-    customerPhone: billing.phone || '',
-    total: wcOrder.total || '0.00',
-    currency: wcOrder.currency || 'USD',
-    paymentMethod: wcOrder.payment_method || 'unknown',
-    paymentMethodTitle: wcOrder.payment_method_title || 'Unknown Payment Method',
-    transactionId: wcOrder.transaction_id || '',
+    status: getValidValue(wcOrder.status, 'pending'),
+    customerEmail: getValidValue(billing.email, 'unknown@example.com'),
+    customerName: `${getValidValue(billing.first_name, 'Unknown')} ${getValidValue(billing.last_name, 'Customer')}`,
+    customerPhone: getValidValue(billing.phone, ''),
+    total: getValidValue(wcOrder.total, '0.00'),
+    currency: getValidValue(wcOrder.currency, 'USD'),
+    paymentMethod: getValidValue(wcOrder.payment_method, 'unknown'),
+    paymentMethodTitle: getValidValue(wcOrder.payment_method_title, 'Unknown Payment Method'),
+    transactionId: getValidValue(wcOrder.transaction_id, ''),
     lineItems: wcOrder.line_items || [],
     billingAddress: {
-      first_name: billing.first_name || 'Unknown',
-      last_name: billing.last_name || 'Customer',
-      address_1: billing.address_1 || 'Unknown Address',
-      city: billing.city || 'Unknown City',
-      state: billing.state || 'Unknown State',
-      postcode: billing.postcode || '00000',
-      country: billing.country || 'US',
-      email: billing.email || 'unknown@example.com',
-      phone: billing.phone || ''
+      first_name: getValidValue(billing.first_name, 'Unknown'),
+      last_name: getValidValue(billing.last_name, 'Customer'),
+      address_1: getValidValue(billing.address_1, 'Unknown Address'),
+      city: getValidValue(billing.city, 'Unknown City'),
+      state: getValidValue(billing.state, 'Unknown State'),
+      postcode: getValidValue(billing.postcode, '00000'),
+      country: getValidValue(billing.country, 'US'),
+      email: getValidValue(billing.email, 'unknown@example.com'),
+      phone: getValidValue(billing.phone, '')
     },
     shippingAddress: {
-      first_name: shipping.first_name || billing.first_name || 'Unknown',
-      last_name: shipping.last_name || billing.last_name || 'Customer',
-      address_1: shipping.address_1 || billing.address_1 || 'Unknown Address',
-      city: shipping.city || billing.city || 'Unknown City',
-      state: shipping.state || billing.state || 'Unknown State',
-      postcode: shipping.postcode || billing.postcode || '00000',
-      country: shipping.country || billing.country || 'US'
+      first_name: getValidValue(shipping.first_name, getValidValue(billing.first_name, 'Unknown')),
+      last_name: getValidValue(shipping.last_name, getValidValue(billing.last_name, 'Customer')),
+      address_1: getValidValue(shipping.address_1, getValidValue(billing.address_1, 'Unknown Address')),
+      city: getValidValue(shipping.city, getValidValue(billing.city, 'Unknown City')),
+      state: getValidValue(shipping.state, getValidValue(billing.state, 'Unknown State')),
+      postcode: getValidValue(shipping.postcode, getValidValue(billing.postcode, '00000')),
+      country: getValidValue(shipping.country, getValidValue(billing.country, 'US'))
     },
-    orderKey: wcOrder.order_key || `wc_order_${Date.now()}`,
+    orderKey: getValidValue(wcOrder.order_key, `wc_order_${Date.now()}`),
     dateCreated: wcOrder.date_created ? new Date(wcOrder.date_created) : new Date(),
     dateModified: wcOrder.date_modified ? new Date(wcOrder.date_modified) : new Date(),
     dateCompleted: wcOrder.date_completed ? new Date(wcOrder.date_completed) : undefined,
     datePaid: wcOrder.date_paid ? new Date(wcOrder.date_paid) : undefined,
-    customerNote: wcOrder.customer_note || '',
+    customerNote: getValidValue(wcOrder.customer_note, ''),
     metaData: (wcOrder.meta_data || []).map((meta: any) => ({
       key: meta.key,
       value: meta.value
@@ -136,16 +149,18 @@ router.post('/order/created', async (req: Request, res: Response) => {
     
     logWebhookEvent('ORDER_CREATED', wcOrder.id, wcOrder.status);
     
-    // Validate essential order data for full processing
-    if (!wcOrder.billing || !wcOrder.billing.email) {
-      console.log('⚠️ Incomplete order data - cannot process, but acknowledging webhook');
-      return res.status(200).json({
-        success: true,
-        message: 'Webhook acknowledged - incomplete order data',
-        orderId: wcOrder.id,
-        timestamp: new Date().toISOString()
-      });
-    }
+    // Log raw order data for debugging
+    console.log('🔎 Raw order data before transform:', {
+      id: wcOrder.id,
+      status: wcOrder.status,
+      payment_method: wcOrder.payment_method,
+      payment_method_title: wcOrder.payment_method_title,
+      billing: wcOrder.billing,
+      shipping: wcOrder.shipping
+    });
+    
+    // Always try to process the order, even with incomplete data
+    // The transform function will handle missing fields with defaults
     
     // Check if order already exists
     const existingOrder = await Order.findOne({ wordpressOrderId: wcOrder.id });
@@ -163,27 +178,47 @@ router.post('/order/created', async (req: Request, res: Response) => {
     }
     
     // Transform and save new order
-    const orderData = transformWooCommerceOrder(wcOrder);
-    const newOrder = new Order(orderData);
-    await newOrder.save();
-    
-    // Log successful creation
-    console.log(`✅ Order ${wcOrder.id} created successfully in database`);
-    console.log(`📊 Order details: ${wcOrder.billing.email} - ${wcOrder.total} ${wcOrder.currency}`);
-    
-    // Return success response IMMEDIATELY to WordPress
-    res.status(200).json({
-      success: true,
-      message: 'Order created successfully',
-      data: {
+    try {
+      const orderData = transformWooCommerceOrder(wcOrder);
+      console.log('✅ Order data transformed for creation:', {
+        orderId: orderData.wordpressOrderId,
+        paymentMethod: orderData.paymentMethod,
+        billingCountry: orderData.billingAddress.country,
+        shippingCountry: orderData.shippingAddress.country
+      });
+      
+      const newOrder = new Order(orderData);
+      await newOrder.save();
+      
+      // Log successful creation
+      console.log(`✅ Order ${wcOrder.id} created successfully in database`);
+      console.log(`📊 Order details: ${wcOrder.billing?.email || 'Unknown'} - ${wcOrder.total} ${wcOrder.currency}`);
+      
+      // Return success response IMMEDIATELY to WordPress
+      res.status(200).json({
+        success: true,
+        message: 'Order created successfully',
+        data: {
+          orderId: wcOrder.id,
+          internalId: newOrder.id,
+          status: wcOrder.status,
+          total: wcOrder.total,
+          currency: wcOrder.currency,
+          customerEmail: wcOrder.billing?.email || 'Unknown'
+        }
+      });
+    } catch (createError) {
+      console.error('❌ Error creating new order:', createError);
+      
+      // Return success to prevent WordPress retries but log the error
+      res.status(200).json({
+        success: true,
+        message: 'Webhook acknowledged - order creation failed',
         orderId: wcOrder.id,
-        internalId: newOrder.id,
-        status: wcOrder.status,
-        total: wcOrder.total,
-        currency: wcOrder.currency,
-        customerEmail: wcOrder.billing.email
-      }
-    });
+        error: createError instanceof Error ? createError.message : 'Unknown error',
+        note: 'Error in creation but webhook acknowledged to prevent retries'
+      });
+    }
     
   } catch (error) {
     console.error('❌ Error processing order created webhook:', error);
@@ -254,16 +289,18 @@ router.post('/order/updated', async (req: Request, res: Response) => {
     
     logWebhookEvent('ORDER_UPDATED', wcOrder.id, wcOrder.status);
     
-    // Validate essential order data for full processing
-    if (!wcOrder.billing || !wcOrder.billing.email) {
-      console.log('⚠️ Incomplete order data - cannot process, but acknowledging webhook');
-      return res.status(200).json({
-        success: true,
-        message: 'Webhook acknowledged - incomplete order data',
-        orderId: wcOrder.id,
-        timestamp: new Date().toISOString()
-      });
-    }
+    // Log raw order data for debugging
+    console.log('🔎 Raw order data before transform:', {
+      id: wcOrder.id,
+      status: wcOrder.status,
+      payment_method: wcOrder.payment_method,
+      payment_method_title: wcOrder.payment_method_title,
+      billing: wcOrder.billing,
+      shipping: wcOrder.shipping
+    });
+    
+    // Always try to process the order, even with incomplete data
+    // The transform function will handle missing fields with defaults
     
     // Find existing order
     const existingOrder = await Order.findOne({ wordpressOrderId: wcOrder.id });
@@ -271,69 +308,124 @@ router.post('/order/updated', async (req: Request, res: Response) => {
     if (!existingOrder) {
       // If order doesn't exist, create it
       console.log(`⚠️ Order ${wcOrder.id} not found, creating new order from update webhook`);
-      const orderData = transformWooCommerceOrder(wcOrder);
-      const newOrder = new Order(orderData);
-      await newOrder.save();
       
-      console.log(`✅ Order ${wcOrder.id} created from update webhook`);
-      
-      return res.status(200).json({
-        success: true,
-        message: 'Order created from update webhook',
-        data: {
+      try {
+        const orderData = transformWooCommerceOrder(wcOrder);
+        console.log('✅ Order data transformed successfully:', {
+          orderId: orderData.wordpressOrderId,
+          paymentMethod: orderData.paymentMethod,
+          billingCountry: orderData.billingAddress.country,
+          shippingCountry: orderData.shippingAddress.country
+        });
+        
+        const newOrder = new Order(orderData);
+        await newOrder.save();
+        
+        console.log(`✅ Order ${wcOrder.id} created from update webhook`);
+        
+        return res.status(200).json({
+          success: true,
+          message: 'Order created from update webhook',
+          data: {
+            orderId: wcOrder.id,
+            internalId: newOrder.id,
+            status: wcOrder.status,
+            action: 'created'
+          }
+        });
+      } catch (createError) {
+        console.error('❌ Error creating order from update webhook:', createError);
+        
+        // Return success to prevent WordPress retries but log the error
+        return res.status(200).json({
+          success: true,
+          message: 'Webhook acknowledged - order creation failed',
           orderId: wcOrder.id,
-          internalId: newOrder.id,
-          status: wcOrder.status,
-          action: 'created'
-        }
-      });
+          error: createError instanceof Error ? createError.message : 'Unknown error',
+          note: 'Error in creation but webhook acknowledged to prevent retries'
+        });
+      }
     }
     
     // Update existing order
-    const orderData = transformWooCommerceOrder(wcOrder);
-    const updatedOrder = await Order.findOneAndUpdate(
-      { wordpressOrderId: wcOrder.id },
-      {
-        ...orderData,
-        isProcessed: true,
-        processedAt: new Date(),
-        processingError: null // Clear any previous errors
-      },
-      { new: true }
-    );
-    
-    console.log(`✅ Order ${wcOrder.id} updated successfully - Status: ${wcOrder.status} (was: ${existingOrder.status})`);
-    
-    // You can add status-specific processing here
-    switch (wcOrder.status) {
-      case 'completed':
-        console.log(`🎉 Order ${wcOrder.id} completed - Customer: ${wcOrder.billing.email}`);
-        // Add any completion logic here
-        break;
-      case 'cancelled':
-        console.log(`❌ Order ${wcOrder.id} cancelled - Reason: Status change`);
-        // Add any cancellation logic here
-        break;
-      case 'processing':
-        console.log(`⏳ Order ${wcOrder.id} is now processing`);
-        // Add any processing logic here
-        break;
-      default:
-        console.log(`📝 Order ${wcOrder.id} status changed to: ${wcOrder.status}`);
-    }
-    
-    // Return success response IMMEDIATELY to WordPress
-    res.status(200).json({
-      success: true,
-      message: 'Order updated successfully',
-      data: {
-        orderId: wcOrder.id,
-        internalId: updatedOrder?.id,
-        status: wcOrder.status,
-        previousStatus: existingOrder.status,
-        action: 'updated'
+    try {
+      const orderData = transformWooCommerceOrder(wcOrder);
+      console.log('✅ Order data transformed for update:', {
+        orderId: orderData.wordpressOrderId,
+        paymentMethod: orderData.paymentMethod,
+        billingCountry: orderData.billingAddress.country,
+        shippingCountry: orderData.shippingAddress.country
+      });
+      
+      const updatedOrder = await Order.findOneAndUpdate(
+        { wordpressOrderId: wcOrder.id },
+        {
+          ...orderData,
+          isProcessed: true,
+          processedAt: new Date(),
+          processingError: null // Clear any previous errors
+        },
+        { new: true }
+      );
+      
+      console.log(`✅ Order ${wcOrder.id} updated successfully - Status: ${wcOrder.status} (was: ${existingOrder.status})`);
+      
+      // You can add status-specific processing here
+      switch (wcOrder.status) {
+        case 'completed':
+          console.log(`🎉 Order ${wcOrder.id} completed - Customer: ${wcOrder.billing?.email || 'Unknown'}`);
+          // Add any completion logic here
+          break;
+        case 'cancelled':
+          console.log(`❌ Order ${wcOrder.id} cancelled - Reason: Status change`);
+          // Add any cancellation logic here
+          break;
+        case 'processing':
+          console.log(`⏳ Order ${wcOrder.id} is now processing`);
+          // Add any processing logic here
+          break;
+        default:
+          console.log(`📝 Order ${wcOrder.id} status changed to: ${wcOrder.status}`);
       }
-    });
+      
+      // Return success response IMMEDIATELY to WordPress
+      res.status(200).json({
+        success: true,
+        message: 'Order updated successfully',
+        data: {
+          orderId: wcOrder.id,
+          internalId: updatedOrder?.id,
+          status: wcOrder.status,
+          previousStatus: existingOrder.status,
+          action: 'updated'
+        }
+      });
+    } catch (updateError) {
+      console.error('❌ Error updating existing order:', updateError);
+      
+      // Update the order with error info but still return success
+      try {
+        await Order.findOneAndUpdate(
+          { wordpressOrderId: wcOrder.id },
+          { 
+            processingError: updateError instanceof Error ? updateError.message : 'Unknown error',
+            isProcessed: false,
+            processedAt: new Date()
+          }
+        );
+      } catch (logError) {
+        console.error('Failed to log update error:', logError);
+      }
+      
+      // Return success to prevent WordPress retries
+      res.status(200).json({
+        success: true,
+        message: 'Webhook acknowledged - order update failed',
+        orderId: wcOrder.id,
+        error: updateError instanceof Error ? updateError.message : 'Unknown error',
+        note: 'Error in update but webhook acknowledged to prevent retries'
+      });
+    }
     
   } catch (error) {
     console.error('❌ Error processing order updated webhook:', error);
