@@ -43,17 +43,21 @@ const validateWebhookSignature = (req, res, next) => {
 const generateRandomPassword = () => {
     return '123456789'; // Fixed default password
 };
-// Helper function to recalculate user points from all orders
+// Helper function to recalculate user points from completed orders only
 const recalculateUserPointsFromOrders = async (customerEmail) => {
     try {
-        // Get all orders for this customer
-        const orders = await order_1.default.find({ customerEmail });
-        // Calculate total points from all orders
+        // Get only COMPLETED orders for this customer
+        const completedOrders = await order_1.default.find({
+            customerEmail,
+            status: 'completed'
+        });
+        // Calculate total points from completed orders only
         let totalPoints = 0;
-        for (const order of orders) {
+        for (const order of completedOrders) {
             const orderValue = parseFloat(order.total) || 0;
             totalPoints += orderValue;
         }
+        console.log(`💰 Customer ${customerEmail}: ${completedOrders.length} completed orders = ${totalPoints} points`);
         return totalPoints;
     }
     catch (error) {
@@ -68,6 +72,8 @@ const createOrUpdateUserFromOrder = async (wcOrder, isNewOrder = true) => {
         const customerName = `${wcOrder.billing?.first_name || 'Unknown'} ${wcOrder.billing?.last_name || 'Customer'}`;
         const orderTotal = parseFloat(wcOrder.total) || 0;
         const customerPhone = wcOrder.billing?.phone || '';
+        const orderStatus = wcOrder.status || 'pending';
+        const isCompleted = orderStatus === 'completed';
         if (!customerEmail || customerEmail === '') {
             console.log('⚠️ No customer email provided, skipping user creation');
             return null;
@@ -76,21 +82,32 @@ const createOrUpdateUserFromOrder = async (wcOrder, isNewOrder = true) => {
         let user = await user_1.default.findOne({ email: customerEmail });
         if (user) {
             if (isNewOrder) {
-                // New order: Add points
-                const previousPoints = user.points || 0;
-                const previousOrderValue = user.totalOrderValue || 0;
-                user.points = previousPoints + orderTotal;
-                user.totalOrderValue = previousOrderValue + orderTotal;
-                console.log(`✅ User ${customerEmail} - NEW ORDER - Points: ${previousPoints} → ${user.points} (+${orderTotal})`);
+                // New order: Only add points if order is completed
+                if (isCompleted) {
+                    const previousPoints = user.points || 0;
+                    const previousOrderValue = user.totalOrderValue || 0;
+                    user.points = previousPoints + orderTotal;
+                    user.totalOrderValue = previousOrderValue + orderTotal;
+                    console.log(`✅ User ${customerEmail} - NEW COMPLETED ORDER - Points: ${previousPoints} → ${user.points} (+${orderTotal})`);
+                }
+                else {
+                    console.log(`ℹ️ User ${customerEmail} - NEW ORDER (${orderStatus}) - No points added until completed`);
+                }
             }
             else {
-                // Updated order: Recalculate total points from all orders
+                // Updated order: Always recalculate total points from completed orders only
                 const newTotalPoints = await recalculateUserPointsFromOrders(customerEmail);
                 const previousPoints = user.points || 0;
                 user.points = newTotalPoints;
                 user.totalOrderValue = newTotalPoints; // Keep in sync
-                console.log(`✅ User ${customerEmail} - ORDER UPDATED - Points recalculated: ${previousPoints} → ${newTotalPoints}`);
+                if (previousPoints !== newTotalPoints) {
+                    console.log(`✅ User ${customerEmail} - ORDER UPDATED (${orderStatus}) - Points recalculated: ${previousPoints} → ${newTotalPoints}`);
+                }
+                else {
+                    console.log(`ℹ️ User ${customerEmail} - ORDER UPDATED (${orderStatus}) - Points unchanged: ${newTotalPoints}`);
+                }
             }
+            // Always update user info regardless of order status
             // Update phone if not set
             if (!user.phone && customerPhone) {
                 user.phone = customerPhone;
@@ -110,12 +127,15 @@ const createOrUpdateUserFromOrder = async (wcOrder, isNewOrder = true) => {
             // Create new user
             const randomPassword = generateRandomPassword();
             const hashedPassword = await bcryptjs_1.default.hash(randomPassword, 10);
+            // Only give points if the order is completed
+            const initialPoints = isCompleted ? orderTotal : 0;
+            const initialOrderValue = isCompleted ? orderTotal : 0;
             const newUser = new user_1.default({
                 name: customerName.trim(),
                 email: customerEmail,
                 password: hashedPassword,
                 role: 'user',
-                points: orderTotal, // Initial points = order value
+                points: initialPoints,
                 avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(customerName)}&background=random`,
                 phone: customerPhone,
                 address: {
@@ -126,11 +146,16 @@ const createOrUpdateUserFromOrder = async (wcOrder, isNewOrder = true) => {
                     country: wcOrder.billing?.country || ''
                 },
                 isAutoCreated: true,
-                totalOrderValue: orderTotal,
+                totalOrderValue: initialOrderValue,
                 isEmailVerified: true // Auto-verify users created from orders
             });
             await newUser.save();
-            console.log(`🎉 User ${customerEmail} created automatically - Password: ${randomPassword}, Points: ${orderTotal}`);
+            if (isCompleted) {
+                console.log(`🎉 User ${customerEmail} created automatically - Password: ${randomPassword}, Points: ${orderTotal} (COMPLETED ORDER)`);
+            }
+            else {
+                console.log(`🎉 User ${customerEmail} created automatically - Password: ${randomPassword}, Points: 0 (ORDER ${orderStatus} - waiting for completion)`);
+            }
             console.log(`📧 SEND TO CUSTOMER: Email: ${customerEmail}, Password: ${randomPassword}`);
             return { user: newUser, plainPassword: randomPassword };
         }

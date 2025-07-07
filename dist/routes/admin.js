@@ -789,31 +789,114 @@ router.get('/orders/:id', async (req, res) => {
 // Get orders statistics
 router.get('/orders/stats/overview', async (req, res) => {
     try {
-        const [totalOrders, pendingOrders, processingOrders, completedOrders, cancelledOrders, totalRevenue] = await Promise.all([
-            order_1.default.countDocuments(),
-            order_1.default.countDocuments({ status: 'pending' }),
-            order_1.default.countDocuments({ status: 'processing' }),
-            order_1.default.countDocuments({ status: 'completed' }),
-            order_1.default.countDocuments({ status: 'cancelled' }),
-            order_1.default.aggregate([
-                { $match: { status: 'completed' } },
-                { $group: { _id: null, total: { $sum: { $toDouble: '$total' } } } }
-            ]).then(result => result[0]?.total || 0)
-        ]);
+        // Get all orders and group by status
+        const allOrders = await order_1.default.find({}, 'status total currency');
+        // Initialize counters
+        const stats = {
+            totalOrders: 0,
+            pendingOrders: 0,
+            processingOrders: 0,
+            completedOrders: 0,
+            onHoldOrders: 0,
+            cancelledOrders: 0,
+            refundedOrders: 0,
+            failedOrders: 0,
+            ecpayOrders: 0,
+            ecpayShippingOrders: 0,
+            trashOrders: 0,
+            totalRevenue: 0
+        };
+        // Process each order
+        allOrders.forEach(order => {
+            stats.totalOrders++;
+            // Count by status
+            switch (order.status) {
+                case 'pending':
+                    stats.pendingOrders++;
+                    break;
+                case 'processing':
+                    stats.processingOrders++;
+                    break;
+                case 'completed':
+                    stats.completedOrders++;
+                    // Add to revenue only for completed orders
+                    stats.totalRevenue += parseFloat(order.total) || 0;
+                    break;
+                case 'on-hold':
+                    stats.onHoldOrders++;
+                    break;
+                case 'cancelled':
+                    stats.cancelledOrders++;
+                    break;
+                case 'refunded':
+                    stats.refundedOrders++;
+                    break;
+                case 'failed':
+                    stats.failedOrders++;
+                    break;
+                case 'ecpay':
+                    stats.ecpayOrders++;
+                    break;
+                case 'ecpay-shipping':
+                    stats.ecpayShippingOrders++;
+                    break;
+                case 'trash':
+                    stats.trashOrders++;
+                    break;
+                default:
+                    console.log(`Unknown order status: ${order.status}`);
+            }
+        });
+        // Get recent orders
         const recentOrders = await order_1.default.find()
             .sort({ createdAt: -1 })
             .limit(5)
             .select('wordpressOrderId customerName customerEmail status total currency createdAt');
+        // Get additional stats
+        const additionalStats = await Promise.all([
+            // Total customers (unique emails)
+            order_1.default.distinct('customerEmail').then(emails => emails.length),
+            // Average order value
+            order_1.default.aggregate([
+                { $match: { status: 'completed' } },
+                { $group: { _id: null, avg: { $avg: { $toDouble: '$total' } } } }
+            ]).then(result => Math.round(result[0]?.avg || 0)),
+            // Orders this month
+            order_1.default.countDocuments({
+                createdAt: {
+                    $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+                }
+            }),
+            // Revenue this month
+            order_1.default.aggregate([
+                {
+                    $match: {
+                        status: 'completed',
+                        createdAt: {
+                            $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+                        }
+                    }
+                },
+                { $group: { _id: null, total: { $sum: { $toDouble: '$total' } } } }
+            ]).then(result => result[0]?.total || 0)
+        ]);
+        const [totalCustomers, averageOrderValue, ordersThisMonth, revenueThisMonth] = additionalStats;
+        console.log('📊 Order Stats Calculated:', {
+            totalOrders: stats.totalOrders,
+            completed: stats.completedOrders,
+            totalRevenue: stats.totalRevenue,
+            totalCustomers,
+            averageOrderValue
+        });
         res.json({
             success: true,
             data: {
                 stats: {
-                    totalOrders,
-                    pendingOrders,
-                    processingOrders,
-                    completedOrders,
-                    cancelledOrders,
-                    totalRevenue
+                    ...stats,
+                    totalCustomers,
+                    averageOrderValue,
+                    ordersThisMonth,
+                    revenueThisMonth
                 },
                 recentOrders
             }
