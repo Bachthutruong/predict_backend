@@ -44,15 +44,7 @@ if (process.env.FRONTEND_URL) {
   allowedOrigins.push(process.env.FRONTEND_URL);
 }
 
-// Separate CORS for webhooks and regular API
-app.use('/api/webhook', cors({
-  origin: true, // Allow all origins for webhooks
-  credentials: false, // No credentials needed for webhooks
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: '*', // Allow all headers for webhooks
-  preflightContinue: false,
-  optionsSuccessStatus: 200
-}));
+// Separate CORS for webhooks - this will be applied when webhook routes are registered
 
 app.use(cors({
   origin: function (origin, callback) {
@@ -121,9 +113,19 @@ app.get('/health', (req, res) => {
   });
 });
 
-// ⚠️ CRITICAL: Webhook routes FIRST with NO middleware
-console.log('🔧 Setting up WEBHOOK routes with NO rate limiting...');
-app.use('/api/webhook', webhookRoutes);
+// ⚠️ CRITICAL: Webhook routes FIRST with CORS but NO rate limiting
+console.log('🔧 Setting up WEBHOOK routes with CORS but NO rate limiting...');
+app.use('/api/webhook', 
+  cors({
+    origin: true, // Allow all origins for webhooks
+    credentials: false, // No credentials needed for webhooks
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: '*', // Allow all headers for webhooks
+    preflightContinue: false,
+    optionsSuccessStatus: 200
+  }), 
+  webhookRoutes
+);
 
 // TEMPORARILY DISABLED: Rate limiting to debug webhook issues
 // const limiter = rateLimit({
