@@ -126,6 +126,18 @@ app.all('/api/webhook/direct-test', (req, res) => {
   });
 });
 
+// TEMPORARY: Simple test endpoint without webhook prefix
+app.all('/api/simple-test', (req, res) => {
+  console.log('🔥 SIMPLE API TEST HIT');
+  res.json({
+    success: true,
+    message: 'Simple API test working',
+    timestamp: new Date().toISOString(),
+    method: req.method,
+    path: req.path
+  });
+});
+
 // ⚠️ CRITICAL: Webhook routes FIRST with CORS but NO rate limiting
 console.log('🔧 Setting up WEBHOOK routes with CORS but NO rate limiting...');
 app.use('/api/webhook', 
