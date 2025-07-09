@@ -23,6 +23,7 @@ const feedback_1 = __importDefault(require("./routes/feedback"));
 const dashboard_1 = __importDefault(require("./routes/dashboard"));
 const cloudinary_1 = __importDefault(require("./routes/cloudinary"));
 const webhook_1 = __importDefault(require("./routes/webhook"));
+const survey_1 = __importDefault(require("./routes/survey")); // Import survey routes
 console.log('🔍 Webhook routes imported:', typeof webhook_1.default, webhook_1.default);
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5001;
@@ -154,6 +155,7 @@ app.use('/api/check-in', check_in_1.default);
 app.use('/api/feedback', feedback_1.default);
 app.use('/api/dashboard', dashboard_1.default);
 app.use('/api/cloudinary', cloudinary_1.default);
+app.use('/api/surveys', survey_1.default); // Use survey routes
 // 404 handler
 app.use('*', (req, res) => {
     res.status(404).json({

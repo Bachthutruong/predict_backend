@@ -20,6 +20,7 @@ import feedbackRoutes from './routes/feedback';
 import dashboardRoutes from './routes/dashboard';
 import cloudinaryRoutes from './routes/cloudinary';
 import webhookRoutes from './routes/webhook';
+import surveyRoutes from './routes/survey'; // Import survey routes
 console.log('🔍 Webhook routes imported:', typeof webhookRoutes, webhookRoutes);
 
 const app = express();
@@ -183,6 +184,7 @@ app.use('/api/check-in', checkInRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/cloudinary', cloudinaryRoutes);
+app.use('/api/surveys', surveyRoutes); // Use survey routes
 
 // 404 handler
 app.use('*', (req, res) => {
