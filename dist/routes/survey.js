@@ -8,6 +8,11 @@ const router = express_1.default.Router();
 const adminSurvey_controller_1 = require("../controllers/adminSurvey.controller");
 const userSurvey_controller_1 = require("../controllers/userSurvey.controller");
 const auth_1 = require("../middleware/auth");
+// --- PUBLIC ROUTES (no auth required) ---
+router.route('/public')
+    .get(userSurvey_controller_1.getPublishedSurveys);
+router.route('/public/:id')
+    .get(userSurvey_controller_1.getSurveyToFill);
 // --- ADMIN ROUTES ---
 router.route('/admin')
     .post(auth_1.authMiddleware, auth_1.adminMiddleware, adminSurvey_controller_1.createSurvey)

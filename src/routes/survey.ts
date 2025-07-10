@@ -19,6 +19,13 @@ import {
 
 import { authMiddleware as protect, adminMiddleware as admin } from '../middleware/auth';
 
+// --- PUBLIC ROUTES (no auth required) ---
+router.route('/public')
+    .get(getPublishedSurveys);
+
+router.route('/public/:id')
+    .get(getSurveyToFill);
+
 // --- ADMIN ROUTES ---
 router.route('/admin')
     .post(protect, admin, createSurvey)

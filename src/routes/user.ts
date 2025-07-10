@@ -179,8 +179,7 @@ router.get('/transactions', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const transactions = await PointTransaction.find({ userId: req.user!.id })
       .populate('adminId', 'name')
-      .sort({ createdAt: -1 })
-      .limit(50);
+      .sort({ createdAt: -1 });
 
     // Transform the data to match frontend expectations
     const transformedTransactions = transactions.map(transaction => {

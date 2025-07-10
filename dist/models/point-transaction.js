@@ -7,7 +7,7 @@ const PointTransactionSchema = new mongoose_1.Schema({
     amount: { type: Number, required: true, index: true },
     reason: {
         type: String,
-        enum: ['check-in', 'referral', 'feedback', 'prediction-win', 'admin-grant', 'streak-bonus', 'survey-completion'],
+        enum: ['check-in', 'referral', 'feedback', 'prediction-win', 'admin-grant', 'streak-bonus', 'survey-completion', 'order-completion'],
         required: true,
         index: true,
     },

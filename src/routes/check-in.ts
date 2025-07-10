@@ -46,7 +46,35 @@ router.get('/status', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
-// Get today's question
+// GET a public question for guests
+router.get('/question/public', async (req, res) => {
+  try {
+    // Fetch one random active question
+    const question = await Question.aggregate([
+      { $match: { status: 'active' } },
+      { $sample: { size: 1 } }
+    ]);
+
+    if (!question || question.length === 0) {
+      return res.status(404).json({ success: false, message: 'No active questions available' });
+    }
+
+    // Don't expose the answer
+    const publicQuestion = {
+      id: question[0]._id,
+      questionText: question[0].questionText,
+      imageUrl: question[0].imageUrl,
+      points: question[0].points,
+    };
+
+    res.json({ success: true, data: publicQuestion });
+  } catch (error) {
+    console.error('Get public question error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// GET a question for a logged-in user
 router.get('/question', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.id;
