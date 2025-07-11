@@ -256,4 +256,45 @@ router.get('/referrals', authMiddleware, async (req: AuthRequest, res: Response)
   }
 });
 
+// Set referral code (only if not set)
+router.post('/set-referral-code', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { referralCode } = req.body;
+    if (!referralCode || typeof referralCode !== 'string' || referralCode.trim().length < 4) {
+      return res.status(400).json({
+        success: false,
+        message: 'Referral code must be at least 4 characters.'
+      });
+    }
+    const user = await User.findById(req.user!.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    if (user.referralCode) {
+      return res.status(400).json({
+        success: false,
+        message: 'Referral code already set and cannot be changed.'
+      });
+    }
+    // Check uniqueness
+    const existing = await User.findOne({ referralCode: referralCode.trim().toUpperCase() });
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: 'Referral code already exists. Please choose another.'
+      });
+    }
+    user.referralCode = referralCode.trim().toUpperCase();
+    await user.save();
+    res.json({
+      success: true,
+      data: { referralCode: user.referralCode },
+      message: 'Referral code set successfully.'
+    });
+  } catch (error) {
+    console.error('Set referral code error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 export default router; 

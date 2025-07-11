@@ -8,6 +8,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 // Rate limiting completely removed from dependencies
 import dbConnect from './config/database';
+import { createIndexes } from './utils/seed';
 
 // Import routes
 import authRoutes from './routes/auth';
@@ -21,6 +22,7 @@ import dashboardRoutes from './routes/dashboard';
 import cloudinaryRoutes from './routes/cloudinary';
 import webhookRoutes from './routes/webhook';
 import surveyRoutes from './routes/survey'; // Import survey routes
+import votingRoutes from './routes/voting'; // Import voting routes
 console.log('🔍 Webhook routes imported:', typeof webhookRoutes, webhookRoutes);
 
 const app = express();
@@ -111,7 +113,19 @@ app.use('/api/webhook', (req, res, next) => {
 });
 
 // Connect to database
-dbConnect();
+dbConnect()
+  .then(() => {
+    console.log('✅ Database connected successfully');
+    // Create indexes for better performance
+    return createIndexes();
+  })
+  .then(() => {
+    console.log('✅ Server setup completed');
+  })
+  .catch((error) => {
+    console.error('❌ Database connection failed:', error);
+    process.exit(1);
+  });
 
 // Global debug middleware
 app.use('*', (req, res, next) => {
@@ -185,6 +199,7 @@ app.use('/api/feedback', feedbackRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/cloudinary', cloudinaryRoutes);
 app.use('/api/surveys', surveyRoutes); // Use survey routes
+app.use('/api/voting', votingRoutes); // Use voting routes
 
 // 404 handler
 app.use('*', (req, res) => {

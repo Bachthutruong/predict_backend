@@ -8,6 +8,10 @@ const UserPredictionSchema = new mongoose_1.Schema({
     isCorrect: { type: Boolean, default: false },
     pointsSpent: { type: Number, required: true },
 }, { timestamps: true });
+// Add indexes for better performance
+UserPredictionSchema.index({ predictionId: 1, createdAt: -1 }); // For prediction details query
+UserPredictionSchema.index({ userId: 1 }); // For user predictions
+UserPredictionSchema.index({ isCorrect: 1 }); // For correct predictions filter
 // Allow multiple predictions from the same user
 // UserPredictionSchema.index({ userId: 1, predictionId: 1 }, { unique: true });
 UserPredictionSchema.set('toJSON', {
@@ -17,6 +21,6 @@ UserPredictionSchema.set('toJSON', {
         delete ret.__v;
     },
 });
-const UserPrediction = mongoose_1.models?.UserPrediction || (0, mongoose_1.model)('UserPrediction', UserPredictionSchema);
+const UserPrediction = mongoose_1.models.UserPrediction || (0, mongoose_1.model)('UserPrediction', UserPredictionSchema);
 exports.default = UserPrediction;
 //# sourceMappingURL=user-prediction.js.map

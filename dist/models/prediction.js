@@ -12,6 +12,11 @@ const PredictionSchema = new mongoose_1.Schema({
     authorId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true },
     winnerId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
+// Add indexes for better performance
+PredictionSchema.index({ status: 1, createdAt: -1 }); // For active predictions query
+PredictionSchema.index({ authorId: 1 }); // For author lookups
+PredictionSchema.index({ winnerId: 1 }); // For winner lookups
+PredictionSchema.index({ createdAt: -1 }); // For sorting by creation date
 // Add a toJSON transform to convert _id to id
 PredictionSchema.set('toJSON', {
     transform: (doc, ret) => {
@@ -20,6 +25,6 @@ PredictionSchema.set('toJSON', {
         delete ret.__v;
     },
 });
-const Prediction = mongoose_1.models?.Prediction || (0, mongoose_1.model)('Prediction', PredictionSchema);
+const Prediction = mongoose_1.models.Prediction || (0, mongoose_1.model)('Prediction', PredictionSchema);
 exports.default = Prediction;
 //# sourceMappingURL=prediction.js.map

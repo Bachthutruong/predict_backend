@@ -9,23 +9,40 @@ const prediction_1 = __importDefault(require("../models/prediction"));
 const user_prediction_1 = __importDefault(require("../models/user-prediction"));
 const user_1 = __importDefault(require("../models/user"));
 const router = express_1.default.Router();
+// Simple in-memory cache for active predictions (5 minutes)
+let activePredictionsCache = null;
+let cacheTimestamp = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 // Get all active predictions
 router.get('/', async (req, res) => {
     try {
+        // Check cache first
+        const now = Date.now();
+        if (activePredictionsCache && (now - cacheTimestamp) < CACHE_DURATION) {
+            return res.json({
+                success: true,
+                data: activePredictionsCache,
+                cached: true
+            });
+        }
+        // Fetch from database with optimized query
         const predictions = await prediction_1.default.find({ status: 'active' })
             .populate('authorId', 'name')
-            .sort({ createdAt: -1 });
+            .sort({ createdAt: -1 })
+            .lean() // Use lean() for better performance
+            .exec();
         // Transform the data to match frontend expectations
-        const transformedPredictions = predictions.map(prediction => {
-            const obj = prediction.toObject();
-            return {
-                ...obj,
-                id: obj._id.toString() // Ensure ID is properly set
-            };
-        });
+        const transformedPredictions = predictions.map(prediction => ({
+            ...prediction,
+            id: prediction._id.toString() // Ensure ID is properly set
+        }));
+        // Update cache
+        activePredictionsCache = transformedPredictions;
+        cacheTimestamp = now;
         res.json({
             success: true,
-            data: transformedPredictions
+            data: transformedPredictions,
+            cached: false
         });
     }
     catch (error) {
@@ -42,38 +59,40 @@ router.get('/:id', async (req, res) => {
         const { page = 1, limit = 20 } = req.query;
         const pageNum = parseInt(page);
         const limitNum = parseInt(limit);
+        // Optimize query with lean() and select only needed fields
         const prediction = await prediction_1.default.findById(req.params.id)
             .populate('authorId', 'name avatarUrl')
-            .populate('winnerId', 'name avatarUrl');
+            .populate('winnerId', 'name avatarUrl')
+            .lean()
+            .exec();
         if (!prediction) {
             return res.status(404).json({
                 success: false,
                 message: 'Prediction not found'
             });
         }
-        // Get paginated user predictions
+        // Get paginated user predictions with optimized query
         const userPredictions = await user_prediction_1.default.find({ predictionId: req.params.id })
             .populate('userId', 'name avatarUrl')
             .sort({ createdAt: -1 })
             .limit(limitNum)
-            .skip((pageNum - 1) * limitNum);
-        // Get total count for pagination
+            .skip((pageNum - 1) * limitNum)
+            .lean()
+            .exec();
+        // Get total count for pagination (use countDocuments for better performance)
         const totalUserPredictions = await user_prediction_1.default.countDocuments({ predictionId: req.params.id });
         const totalPages = Math.ceil(totalUserPredictions / limitNum);
         // Transform user predictions to match frontend expectations
-        const transformedUserPredictions = userPredictions.map(up => {
-            const obj = up.toObject();
-            return {
-                ...obj,
-                id: obj._id.toString(), // Ensure ID is properly set
-                user: obj.userId
-            };
-        });
+        const transformedUserPredictions = userPredictions.map(up => ({
+            ...up,
+            id: up._id.toString(), // Ensure ID is properly set
+            user: up.userId
+        }));
         res.json({
             success: true,
             data: {
                 prediction: {
-                    ...prediction.toObject(),
+                    ...prediction,
                     id: prediction._id.toString() // Ensure ID is properly set
                 },
                 userPredictions: transformedUserPredictions,
@@ -137,6 +156,8 @@ router.post('/:id/submit', auth_1.authMiddleware, async (req, res) => {
             prediction.status = 'finished';
             prediction.winnerId = user._id;
             await prediction.save();
+            // Clear cache when prediction status changes
+            activePredictionsCache = null;
             return res.json({
                 success: true,
                 data: { isCorrect: true, bonusPoints },

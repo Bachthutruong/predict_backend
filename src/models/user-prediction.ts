@@ -8,6 +8,11 @@ const UserPredictionSchema = new Schema({
   pointsSpent: { type: Number, required: true },
 }, { timestamps: true });
 
+// Add indexes for better performance
+UserPredictionSchema.index({ predictionId: 1, createdAt: -1 }); // For prediction details query
+UserPredictionSchema.index({ userId: 1 }); // For user predictions
+UserPredictionSchema.index({ isCorrect: 1 }); // For correct predictions filter
+
 // Allow multiple predictions from the same user
 // UserPredictionSchema.index({ userId: 1, predictionId: 1 }, { unique: true });
 
@@ -19,5 +24,6 @@ UserPredictionSchema.set('toJSON', {
   },
 });
 
-const UserPrediction = models?.UserPrediction || model('UserPrediction', UserPredictionSchema);
+const UserPrediction = models.UserPrediction || model('UserPrediction', UserPredictionSchema);
+
 export default UserPrediction; 

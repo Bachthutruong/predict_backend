@@ -12,6 +12,7 @@ const helmet_1 = __importDefault(require("helmet"));
 const compression_1 = __importDefault(require("compression"));
 // Rate limiting completely removed from dependencies
 const database_1 = __importDefault(require("./config/database"));
+const seed_1 = require("./utils/seed");
 // Import routes
 const auth_1 = __importDefault(require("./routes/auth"));
 const user_1 = __importDefault(require("./routes/user"));
@@ -24,6 +25,7 @@ const dashboard_1 = __importDefault(require("./routes/dashboard"));
 const cloudinary_1 = __importDefault(require("./routes/cloudinary"));
 const webhook_1 = __importDefault(require("./routes/webhook"));
 const survey_1 = __importDefault(require("./routes/survey")); // Import survey routes
+const voting_1 = __importDefault(require("./routes/voting")); // Import voting routes
 console.log('🔍 Webhook routes imported:', typeof webhook_1.default, webhook_1.default);
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5001;
@@ -93,7 +95,19 @@ app.use('/api/webhook', (req, res, next) => {
     next();
 });
 // Connect to database
-(0, database_1.default)();
+(0, database_1.default)()
+    .then(() => {
+    console.log('✅ Database connected successfully');
+    // Create indexes for better performance
+    return (0, seed_1.createIndexes)();
+})
+    .then(() => {
+    console.log('✅ Server setup completed');
+})
+    .catch((error) => {
+    console.error('❌ Database connection failed:', error);
+    process.exit(1);
+});
 // Global debug middleware
 app.use('*', (req, res, next) => {
     console.log(`🔍 ${req.method} ${req.path} from ${req.ip} - Origin: ${req.headers.origin || 'none'}`);
@@ -156,6 +170,7 @@ app.use('/api/feedback', feedback_1.default);
 app.use('/api/dashboard', dashboard_1.default);
 app.use('/api/cloudinary', cloudinary_1.default);
 app.use('/api/surveys', survey_1.default); // Use survey routes
+app.use('/api/voting', voting_1.default); // Use voting routes
 // 404 handler
 app.use('*', (req, res) => {
     res.status(404).json({

@@ -12,6 +12,12 @@ const PredictionSchema = new Schema({
   winnerId: { type: Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 
+// Add indexes for better performance
+PredictionSchema.index({ status: 1, createdAt: -1 }); // For active predictions query
+PredictionSchema.index({ authorId: 1 }); // For author lookups
+PredictionSchema.index({ winnerId: 1 }); // For winner lookups
+PredictionSchema.index({ createdAt: -1 }); // For sorting by creation date
+
 // Add a toJSON transform to convert _id to id
 PredictionSchema.set('toJSON', {
   transform: (doc, ret) => {
@@ -21,5 +27,6 @@ PredictionSchema.set('toJSON', {
   },
 });
 
-const Prediction = models?.Prediction || model('Prediction', PredictionSchema);
+const Prediction = models.Prediction || model('Prediction', PredictionSchema);
+
 export default Prediction; 

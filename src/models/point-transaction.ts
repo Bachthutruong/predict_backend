@@ -6,7 +6,7 @@ const PointTransactionSchema = new Schema({
   amount: { type: Number, required: true, index: true },
   reason: {
     type: String,
-    enum: ['check-in', 'referral', 'feedback', 'prediction-win', 'admin-grant', 'streak-bonus', 'survey-completion', 'order-completion'],
+    enum: ['check-in', 'referral', 'feedback', 'prediction-win', 'admin-grant', 'streak-bonus', 'survey-completion', 'order-completion', 'vote', 'vote-removal'],
     required: true,
     index: true,
   },
