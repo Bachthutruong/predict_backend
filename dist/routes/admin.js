@@ -101,25 +101,32 @@ router.post('/predictions', async (req, res) => {
         });
     }
 });
-// Get all predictions
+// Get all predictions with stats
 router.get('/predictions', async (req, res) => {
     try {
         const predictions = await prediction_1.default.find()
             .populate('authorId', 'name')
             .populate('winnerId', 'name avatarUrl')
             .sort({ createdAt: -1 });
-        // Transform the data to match frontend expectations
-        const transformedPredictions = predictions.map(prediction => {
+        // Get stats for each prediction
+        const predictionsWithStats = await Promise.all(predictions.map(async (prediction) => {
+            const userPredictions = await user_prediction_1.default.find({ predictionId: prediction._id });
+            const totalParticipants = userPredictions.length;
+            const totalPoints = userPredictions.reduce((sum, up) => sum + up.pointsSpent, 0);
+            const averagePoints = totalParticipants > 0 ? Math.round(totalPoints / totalParticipants) : 0;
             const obj = prediction.toObject();
             return {
                 ...obj,
                 id: obj._id.toString(), // Ensure ID is properly set
-                correctAnswer: obj.answer
+                correctAnswer: obj.answer,
+                totalParticipants,
+                totalPoints,
+                averagePoints
             };
-        });
+        }));
         res.json({
             success: true,
-            data: transformedPredictions
+            data: predictionsWithStats
         });
     }
     catch (error) {
