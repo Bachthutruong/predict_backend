@@ -40,6 +40,8 @@ exports.createIndexes = void 0;
 const user_1 = __importDefault(require("../models/user"));
 const prediction_1 = __importDefault(require("../models/prediction"));
 const user_prediction_1 = __importDefault(require("../models/user-prediction"));
+const contest_1 = __importDefault(require("../models/contest"));
+const user_contest_1 = __importDefault(require("../models/user-contest"));
 const question_1 = __importDefault(require("../models/question"));
 const feedback_1 = __importDefault(require("../models/feedback"));
 const survey_1 = __importDefault(require("../models/survey"));
@@ -66,6 +68,15 @@ const createIndexes = async () => {
         await user_prediction_1.default.collection.createIndex({ predictionId: 1, createdAt: -1 });
         await user_prediction_1.default.collection.createIndex({ userId: 1 });
         await user_prediction_1.default.collection.createIndex({ isCorrect: 1 });
+        // Contest indexes
+        await contest_1.default.collection.createIndex({ status: 1, createdAt: -1 });
+        await contest_1.default.collection.createIndex({ authorId: 1 });
+        await contest_1.default.collection.createIndex({ startDate: 1, endDate: 1 });
+        await contest_1.default.collection.createIndex({ isAnswerPublished: 1 });
+        // UserContest indexes
+        await user_contest_1.default.collection.createIndex({ contestId: 1, createdAt: -1 });
+        await user_contest_1.default.collection.createIndex({ userId: 1 });
+        await user_contest_1.default.collection.createIndex({ isCorrect: 1 });
         // Question indexes
         await question_1.default.collection.createIndex({ status: 1 });
         await question_1.default.collection.createIndex({ createdAt: -1 });

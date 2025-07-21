@@ -46,6 +46,36 @@ export type UserPrediction = {
     pointsSpent: number;
     createdAt: string;
 };
+export type Contest = {
+    id: string;
+    title: string;
+    description: string;
+    imageUrl: string;
+    startDate: string;
+    endDate: string;
+    pointsPerAnswer: number;
+    rewardPoints: number;
+    answer: string | null;
+    isAnswerPublished: boolean;
+    status: 'active' | 'finished' | 'draft';
+    authorId: string;
+    createdAt: string;
+};
+export type UserContest = {
+    id: string;
+    userId: string;
+    user: {
+        id: string;
+        name: string;
+        avatarUrl: string;
+    };
+    contestId: string;
+    answer: string;
+    isCorrect: boolean;
+    pointsSpent: number;
+    rewardPointsEarned: number;
+    createdAt: string;
+};
 export type Feedback = {
     id: string;
     userId: string;
@@ -66,7 +96,7 @@ export type PointTransaction = {
         name: string;
     };
     amount: number;
-    reason: 'check-in' | 'referral' | 'feedback' | 'prediction-win' | 'admin-grant' | 'streak-bonus';
+    reason: 'check-in' | 'referral' | 'feedback' | 'prediction-win' | 'admin-grant' | 'streak-bonus' | 'contest-participation' | 'contest-win';
     createdAt: string;
     notes?: string;
 };

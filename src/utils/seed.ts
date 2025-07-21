@@ -2,6 +2,8 @@ import dbConnect from '../config/database';
 import User from '../models/user';
 import Prediction from '../models/prediction';
 import UserPrediction from '../models/user-prediction';
+import Contest from '../models/contest';
+import UserContest from '../models/user-contest';
 import Question from '../models/question';
 import Feedback from '../models/feedback';
 import Survey from '../models/survey';
@@ -33,6 +35,17 @@ export const createIndexes = async () => {
     await UserPrediction.collection.createIndex({ predictionId: 1, createdAt: -1 });
     await UserPrediction.collection.createIndex({ userId: 1 });
     await UserPrediction.collection.createIndex({ isCorrect: 1 });
+    
+    // Contest indexes
+    await Contest.collection.createIndex({ status: 1, createdAt: -1 });
+    await Contest.collection.createIndex({ authorId: 1 });
+    await Contest.collection.createIndex({ startDate: 1, endDate: 1 });
+    await Contest.collection.createIndex({ isAnswerPublished: 1 });
+    
+    // UserContest indexes
+    await UserContest.collection.createIndex({ contestId: 1, createdAt: -1 });
+    await UserContest.collection.createIndex({ userId: 1 });
+    await UserContest.collection.createIndex({ isCorrect: 1 });
     
     // Question indexes
     await Question.collection.createIndex({ status: 1 });

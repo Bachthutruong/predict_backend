@@ -23,6 +23,8 @@ import cloudinaryRoutes from './routes/cloudinary';
 import webhookRoutes from './routes/webhook';
 import surveyRoutes from './routes/survey'; // Import survey routes
 import votingRoutes from './routes/voting'; // Import voting routes
+import contestRoutes from './routes/contest'; // Import contest routes
+import adminContestRoutes from './routes/adminContest'; // Import admin contest routes
 console.log('🔍 Webhook routes imported:', typeof webhookRoutes, webhookRoutes);
 
 const app = express();
@@ -192,7 +194,9 @@ console.log('🔧 Setting up API routes WITHOUT rate limiting (permanently remov
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/predictions', predictionRoutes);
+app.use('/api/contests', contestRoutes); // Use contest routes
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin/contests', adminContestRoutes); // Use admin contest routes
 app.use('/api/staff', staffRoutes);
 app.use('/api/check-in', checkInRoutes);
 app.use('/api/feedback', feedbackRoutes);

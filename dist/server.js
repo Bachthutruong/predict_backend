@@ -26,6 +26,8 @@ const cloudinary_1 = __importDefault(require("./routes/cloudinary"));
 const webhook_1 = __importDefault(require("./routes/webhook"));
 const survey_1 = __importDefault(require("./routes/survey")); // Import survey routes
 const voting_1 = __importDefault(require("./routes/voting")); // Import voting routes
+const contest_1 = __importDefault(require("./routes/contest")); // Import contest routes
+const adminContest_1 = __importDefault(require("./routes/adminContest")); // Import admin contest routes
 console.log('🔍 Webhook routes imported:', typeof webhook_1.default, webhook_1.default);
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5001;
@@ -163,7 +165,9 @@ console.log('🔧 Setting up API routes WITHOUT rate limiting (permanently remov
 app.use('/api/auth', auth_1.default);
 app.use('/api/users', user_1.default);
 app.use('/api/predictions', prediction_1.default);
+app.use('/api/contests', contest_1.default); // Use contest routes
 app.use('/api/admin', admin_1.default);
+app.use('/api/admin/contests', adminContest_1.default); // Use admin contest routes
 app.use('/api/staff', staff_1.default);
 app.use('/api/check-in', check_in_1.default);
 app.use('/api/feedback', feedback_1.default);
