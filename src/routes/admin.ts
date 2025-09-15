@@ -1,5 +1,6 @@
 import express from 'express';
 import { authMiddleware, adminMiddleware, AuthRequest } from '../middleware/auth';
+import { checkPredictionAuthor, checkPredictionViewAccess } from '../middleware/predictionAuth';
 import Prediction from '../models/prediction';
 import User from '../models/user';
 import Feedback from '../models/feedback';
@@ -7,6 +8,7 @@ import Question from '../models/question';
 import PointTransaction from '../models/point-transaction';
 import UserPrediction from '../models/user-prediction';
 import Order from '../models/order';
+import { encrypt } from '../utils/encryption';
 
 const router = express.Router();
 
@@ -80,24 +82,38 @@ router.get('/dashboard-stats', async (req, res) => {
 // Create prediction
 router.post('/predictions', async (req: AuthRequest, res) => {
   try {
-    const { title, description, imageUrl, correctAnswer, pointsCost } = req.body;
+    const { title, description, imageUrl, correctAnswer } = req.body;
+    // Coerce numeric fields from body (can arrive as strings)
+    const pointsCost = Number(req.body.pointsCost);
+    const rewardPointsInput = req.body.rewardPoints;
+    const rewardPoints = Number(rewardPointsInput);
+
+    // Encrypt the answer before storing
+    const encryptedAnswer = encrypt(correctAnswer);
 
     const prediction = new Prediction({
       title,
       description,
       imageUrl,
-      answer: correctAnswer,
-      pointsCost,
+      answer: encryptedAnswer,
+      pointsCost: isNaN(pointsCost) ? 0 : pointsCost,
+      rewardPoints: !isNaN(rewardPoints) && rewardPoints > 0
+        ? rewardPoints
+        : Math.round((isNaN(pointsCost) ? 0 : pointsCost) * 1.5),
       authorId: req.user!.id
     });
 
     await prediction.save();
 
     // Transform the data to match frontend expectations
+    // Only show decrypted answer to the author
     const transformedPrediction = {
       ...prediction.toObject(),
       id: prediction._id.toString(), // Ensure ID is properly set
-      correctAnswer: prediction.answer
+      // For admin (author) who just created, return decrypted answer in both fields
+      answer: prediction.getDecryptedAnswer(),
+      correctAnswer: prediction.getDecryptedAnswer(),
+      rewardPoints: prediction.rewardPoints
     };
 
     res.status(201).json({
@@ -115,7 +131,7 @@ router.post('/predictions', async (req: AuthRequest, res) => {
 });
 
 // Get all predictions with stats
-router.get('/predictions', async (req, res) => {
+router.get('/predictions', async (req: AuthRequest, res) => {
   try {
     const predictions = await Prediction.find()
       .populate('authorId', 'name')
@@ -131,13 +147,18 @@ router.get('/predictions', async (req, res) => {
         const averagePoints = totalParticipants > 0 ? Math.round(totalPoints / totalParticipants) : 0;
 
         const obj = prediction.toObject();
+        const isAuthor = prediction.isAuthor(req.user!.id);
+        
         return {
           ...obj,
           id: obj._id.toString(), // Ensure ID is properly set
-          correctAnswer: obj.answer,
+          answer: isAuthor ? prediction.getDecryptedAnswer() : '***ENCRYPTED***',
+          correctAnswer: isAuthor ? prediction.getDecryptedAnswer() : '***ENCRYPTED***',
+          rewardPoints: prediction.rewardPoints,
           totalParticipants,
           totalPoints,
-          averagePoints
+          averagePoints,
+          isAuthor // Add flag to indicate if current user is author
         };
       })
     );
@@ -156,28 +177,11 @@ router.get('/predictions', async (req, res) => {
 });
 
 // Get prediction details with user predictions
-router.get('/predictions/:id', async (req, res) => {
+router.get('/predictions/:id', checkPredictionViewAccess as any, async (req: any, res) => {
   try {
     const { id } = req.params;
-
-    // Validate ObjectId
-    if (!id || id === 'undefined' || id === 'null') {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid prediction ID'
-      });
-    }
-
-    const prediction = await Prediction.findById(id)
-      .populate('authorId', 'name')
-      .populate('winnerId', 'name avatarUrl');
-
-    if (!prediction) {
-      return res.status(404).json({
-        success: false,
-        message: 'Prediction not found'
-      });
-    }
+    const prediction = req.prediction!;
+    const canViewAnswer = req.canViewAnswer!;
 
     // Get user predictions for this prediction
     const userPredictions = await UserPrediction.find({ predictionId: id })
@@ -204,7 +208,8 @@ router.get('/predictions/:id', async (req, res) => {
     const predictionWithStats = {
       ...prediction.toObject(),
       id: prediction._id.toString(), // Ensure ID is properly set
-      correctAnswer: prediction.answer,
+      answer: canViewAnswer ? prediction.getDecryptedAnswer() : '***ENCRYPTED***',
+      correctAnswer: canViewAnswer ? prediction.getDecryptedAnswer() : '***ENCRYPTED***',
       totalPredictions,
       correctPredictions,
       totalPointsAwarded,
@@ -225,34 +230,39 @@ router.get('/predictions/:id', async (req, res) => {
 });
 
 // Update prediction
-router.put('/predictions/:id', async (req: AuthRequest, res) => {
+router.put('/predictions/:id', checkPredictionAuthor as any, async (req: any, res) => {
   try {
     const { id } = req.params;
-    const { title, description, imageUrl, correctAnswer, pointsCost, status } = req.body;
+    const { title, description, imageUrl, correctAnswer, status } = req.body;
+    const pointsCost = Number(req.body.pointsCost);
+    const rewardPointsBody = Number(req.body.rewardPoints);
+    const prediction = req.prediction!;
 
-    const prediction = await Prediction.findById(id);
-    if (!prediction) {
-      return res.status(404).json({
-        success: false,
-        message: 'Prediction not found'
-      });
-    }
+    // Encrypt the answer before storing
+    const encryptedAnswer = encrypt(correctAnswer);
 
     // Update prediction fields
     prediction.title = title;
     prediction.description = description;
     prediction.imageUrl = imageUrl;
-    prediction.answer = correctAnswer;
-    prediction.pointsCost = pointsCost;
+    prediction.answer = encryptedAnswer;
+    prediction.pointsCost = isNaN(pointsCost) ? prediction.pointsCost : pointsCost;
+    prediction.rewardPoints = !isNaN(rewardPointsBody) && rewardPointsBody > 0
+      ? rewardPointsBody
+      : Math.round((isNaN(pointsCost) ? prediction.pointsCost : pointsCost) * 1.5);
     prediction.status = status;
 
     await prediction.save();
 
     // Transform the data to match frontend expectations
+    // Only show decrypted answer to the author
     const transformedPrediction = {
       ...prediction.toObject(),
       id: prediction._id.toString(), // Ensure ID is properly set
-      correctAnswer: prediction.answer
+      // For author, keep decrypted answer in both fields
+      answer: prediction.getDecryptedAnswer(),
+      correctAnswer: prediction.getDecryptedAnswer(),
+      rewardPoints: prediction.rewardPoints
     };
 
     res.json({
@@ -270,17 +280,10 @@ router.put('/predictions/:id', async (req: AuthRequest, res) => {
 });
 
 // Delete prediction
-router.delete('/predictions/:id', async (req: AuthRequest, res) => {
+router.delete('/predictions/:id', checkPredictionAuthor as any, async (req: any, res) => {
   try {
     const { id } = req.params;
-
-    const prediction = await Prediction.findById(id);
-    if (!prediction) {
-      return res.status(404).json({
-        success: false,
-        message: 'Prediction not found'
-      });
-    }
+    const prediction = req.prediction!;
 
     // Delete associated user predictions
     await UserPrediction.deleteMany({ predictionId: id });
@@ -301,7 +304,7 @@ router.delete('/predictions/:id', async (req: AuthRequest, res) => {
   }
 });
 
-// Update prediction status
+// Update prediction status (only admin can close predictions)
 router.put('/predictions/:id/status', async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
@@ -315,14 +318,23 @@ router.put('/predictions/:id/status', async (req: AuthRequest, res) => {
       });
     }
 
+    // Only allow admin to close predictions
+    if (status === 'finished' && req.user!.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only admin can close predictions'
+      });
+    }
+
     prediction.status = status;
     await prediction.save();
+
 
     // Transform the data to match frontend expectations
     const transformedPrediction = {
       ...prediction.toObject(),
       id: prediction._id.toString(), // Ensure ID is properly set
-      correctAnswer: prediction.answer
+      correctAnswer: prediction.isAuthor(req.user!.id) ? prediction.getDecryptedAnswer() : '***ENCRYPTED***'
     };
 
     res.json({

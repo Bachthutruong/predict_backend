@@ -1,8 +1,17 @@
 import express from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { checkPredictionViewAccess } from '../middleware/predictionAuth';
 import Prediction from '../models/prediction';
 import UserPrediction from '../models/user-prediction';
 import User from '../models/user';
+import PointTransaction from '../models/point-transaction';
+import { decrypt } from '../utils/encryption';
+
+// Extend AuthRequest to include prediction and canViewAnswer
+interface PredictionAuthRequest extends AuthRequest {
+  prediction?: any;
+  canViewAnswer?: boolean;
+}
 
 const router = express.Router();
 
@@ -56,25 +65,14 @@ router.get('/', async (req, res) => {
 });
 
 // Get prediction details
-router.get('/:id', async (req, res) => {
+router.get('/:id', checkPredictionViewAccess as any, async (req: any, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
     
-    // Optimize query with lean() and select only needed fields
-    const prediction = await Prediction.findById(req.params.id)
-      .populate('authorId', 'name avatarUrl')
-      .populate('winnerId', 'name avatarUrl')
-      .lean()
-      .exec();
-
-    if (!prediction) {
-      return res.status(404).json({
-        success: false,
-        message: 'Prediction not found'
-      });
-    }
+    const prediction = req.prediction!;
+    const canViewAnswer = req.canViewAnswer!;
 
     // Get paginated user predictions with optimized query
     const userPredictions = await UserPrediction.find({ predictionId: req.params.id })
@@ -96,12 +94,17 @@ router.get('/:id', async (req, res) => {
       user: up.userId
     }));
 
+    const predictionObj = prediction.toObject();
     res.json({
       success: true,
       data: {
         prediction: {
-          ...prediction,
-          id: (prediction as any)._id.toString() // Ensure ID is properly set
+          ...predictionObj,
+          id: predictionObj._id.toString(), // Ensure ID is properly set
+          answer: canViewAnswer ? prediction.getDecryptedAnswer() : '***ENCRYPTED***',
+          rewardPoints: prediction.rewardPoints,
+          pointsCost: prediction.pointsCost,
+          createdAt: predictionObj.createdAt
         },
         userPredictions: transformedUserPredictions,
         totalPages
@@ -138,6 +141,20 @@ router.post('/:id/submit', authMiddleware, async (req: AuthRequest, res) => {
       });
     }
 
+    // Check if user already has a correct prediction for this prediction
+    const existingCorrectPrediction = await UserPrediction.findOne({
+      userId,
+      predictionId,
+      isCorrect: true
+    });
+
+    if (existingCorrectPrediction) {
+      return res.status(400).json({
+        success: false,
+        message: 'You have already predicted correctly for this prediction!'
+      });
+    }
+
     const user = await User.findById(userId);
     if (!user || user.points < prediction.pointsCost) {
       return res.status(400).json({
@@ -146,8 +163,9 @@ router.post('/:id/submit', authMiddleware, async (req: AuthRequest, res) => {
       });
     }
 
-    // Check if guess is correct
-    const isCorrect = guess.toLowerCase().trim() === prediction.answer.toLowerCase().trim();
+    // Check if guess is correct - decrypt answer first
+    const decryptedAnswer = prediction.getDecryptedAnswer();
+    const isCorrect = guess.toLowerCase().trim() === decryptedAnswer.toLowerCase().trim();
     
     // Deduct points
     user.points -= prediction.pointsCost;
@@ -163,30 +181,49 @@ router.post('/:id/submit', authMiddleware, async (req: AuthRequest, res) => {
     });
     await userPrediction.save();
 
-    // If correct, award points and mark prediction as finished
+    // If correct, award bonus points and CLOSE the prediction immediately
     if (isCorrect) {
-      const bonusPoints = Math.round(prediction.pointsCost * 1.5);
+      const bonusPoints = prediction.rewardPoints || Math.round(prediction.pointsCost * 1.5);
       user.points += bonusPoints;
       await user.save();
 
+      // Mark prediction finished and set winner
       prediction.status = 'finished';
       prediction.winnerId = user._id;
       await prediction.save();
 
-      // Clear cache when prediction status changes
+      // Clear active cache so list updates instantly
       activePredictionsCache = null;
+
+      // Record the transaction
+      await PointTransaction.create({
+        userId: userId,
+        adminId: prediction.authorId, // Use prediction author as admin for transaction
+        amount: bonusPoints,
+        reason: 'prediction-win',
+        notes: `Correct prediction: ${prediction.title}`
+      });
 
       return res.json({
         success: true,
-        data: { isCorrect: true, bonusPoints },
-        message: 'Correct prediction! You won bonus points!'
+        data: { 
+          isCorrect: true, 
+          bonusPoints,
+          pointsCost: prediction.pointsCost,
+          totalPointsEarned: bonusPoints - prediction.pointsCost
+        },
+        message: `Chính xác! Bạn đã dự đoán đúng, dự đoán đã kết thúc và bạn nhận được ${bonusPoints} điểm thưởng!`
       });
     }
 
     res.json({
       success: true,
-      data: { isCorrect: false },
-      message: 'Prediction submitted successfully'
+      data: { 
+        isCorrect: false,
+        pointsCost: prediction.pointsCost,
+        message: `Dự đoán không đúng. Bạn đã trừ ${prediction.pointsCost} điểm. Hãy thử lại!`
+      },
+      message: 'Dự đoán đã được gửi thành công!'
     });
   } catch (error) {
     console.error('Submit prediction error:', error);

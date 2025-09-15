@@ -175,6 +175,8 @@ export type RegisterData = {
 // Request types
 export interface AuthRequest extends Request {
   user?: AuthUser;
+  prediction?: any; // Prediction document from middleware
+  canViewAnswer?: boolean; // Whether user can view decrypted answer
 }
 
 // WooCommerce Order types
