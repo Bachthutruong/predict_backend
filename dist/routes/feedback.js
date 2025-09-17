@@ -8,7 +8,7 @@ const auth_1 = require("../middleware/auth");
 const feedback_1 = __importDefault(require("../models/feedback"));
 const router = express_1.default.Router();
 // Submit feedback
-router.post('/', auth_1.authMiddleware, async (req, res) => {
+router.post('/', auth_1.authenticate, async (req, res) => {
     try {
         const { feedbackText } = req.body;
         const feedback = new feedback_1.default({
@@ -36,7 +36,7 @@ router.post('/', auth_1.authMiddleware, async (req, res) => {
     }
 });
 // Get user's feedback
-router.get('/my', auth_1.authMiddleware, async (req, res) => {
+router.get('/my', auth_1.authenticate, async (req, res) => {
     try {
         const feedback = await feedback_1.default.find({ userId: req.user.id })
             .sort({ createdAt: -1 });

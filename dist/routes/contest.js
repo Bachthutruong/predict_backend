@@ -11,11 +11,11 @@ const router = express_1.default.Router();
 // Get all active contests
 router.get('/', userContest_controller_1.getActiveContests);
 // Get user's contest history
-router.get('/history', auth_1.authMiddleware, userContest_controller_1.getContestHistory);
+router.get('/history', auth_1.authenticate, userContest_controller_1.getContestHistory);
 // Get contest details (public view)
 router.get('/:id', userContest_controller_1.getContestDetails);
 // Protected routes - authentication required
 // Submit answer to contest
-router.post('/:id/submit', auth_1.authMiddleware, userContest_controller_1.submitContestAnswer);
+router.post('/:id/submit', auth_1.authenticate, userContest_controller_1.submitContestAnswer);
 exports.default = router;
 //# sourceMappingURL=contest.js.map

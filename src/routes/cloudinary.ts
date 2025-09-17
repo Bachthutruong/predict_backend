@@ -1,6 +1,6 @@
 import express from 'express';
 import { v2 as cloudinary } from 'cloudinary';
-import { authMiddleware } from '../middleware/auth';
+import { authenticate } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -12,7 +12,7 @@ cloudinary.config({
 });
 
 // Generate signature for signed upload
-router.post('/signature', authMiddleware, async (req, res) => {
+router.post('/signature', authenticate, async (req, res) => {
   try {
     const { timestamp, folder = 'predict-win' } = req.body;
 

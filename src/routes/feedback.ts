@@ -1,11 +1,11 @@
 import express from 'express';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authenticate, AuthRequest } from '../middleware/auth';
 import Feedback from '../models/feedback';
 
 const router = express.Router();
 
 // Submit feedback
-router.post('/', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/', authenticate, async (req: AuthRequest, res) => {
   try {
     const { feedbackText } = req.body;
 
@@ -37,7 +37,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // Get user's feedback
-router.get('/my', authMiddleware, async (req: AuthRequest, res) => {
+router.get('/my', authenticate, async (req: AuthRequest, res) => {
   try {
     const feedback = await Feedback.find({ userId: req.user!.id })
       .sort({ createdAt: -1 });

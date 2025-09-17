@@ -3,10 +3,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.staffMiddleware = exports.adminMiddleware = exports.authMiddleware = void 0;
+exports.staffMiddleware = exports.authorize = exports.authenticate = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const user_1 = __importDefault(require("../models/user"));
-const authMiddleware = async (req, res, next) => {
+const authenticate = async (req, res, next) => {
     try {
         const token = req.header('Authorization')?.replace('Bearer ', '');
         if (!token) {
@@ -31,17 +31,17 @@ const authMiddleware = async (req, res, next) => {
         res.status(401).json({ success: false, message: 'Token is not valid' });
     }
 };
-exports.authMiddleware = authMiddleware;
-const adminMiddleware = (req, res, next) => {
+exports.authenticate = authenticate;
+const authorize = (roles) => (req, res, next) => {
     if (!req.user) {
         return res.status(401).json({ success: false, message: 'Access denied' });
     }
-    if (req.user.role !== 'admin') {
-        return res.status(403).json({ success: false, message: 'Admin access required' });
+    if (!roles.includes(req.user.role)) {
+        return res.status(403).json({ success: false, message: 'Insufficient permissions' });
     }
     next();
 };
-exports.adminMiddleware = adminMiddleware;
+exports.authorize = authorize;
 const staffMiddleware = (req, res, next) => {
     if (!req.user) {
         return res.status(401).json({ success: false, message: 'Access denied' });

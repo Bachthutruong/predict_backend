@@ -17,7 +17,7 @@ import {
     submitSurvey
 } from '../controllers/userSurvey.controller';
 
-import { authMiddleware as protect, adminMiddleware as admin } from '../middleware/auth';
+import { authenticate, authorize } from '../middleware/auth';
 
 // --- PUBLIC ROUTES (no auth required) ---
 router.route('/public')
@@ -28,26 +28,26 @@ router.route('/public/:id')
 
 // --- ADMIN ROUTES ---
 router.route('/admin')
-    .post(protect, admin, createSurvey)
-    .get(protect, admin, getSurveys);
+    .post(authenticate, authorize(['admin']), createSurvey)
+    .get(authenticate, authorize(['admin']), getSurveys);
 
 router.route('/admin/:id')
-    .get(protect, admin, getSurveyById)
-    .put(protect, admin, updateSurvey)
-    .delete(protect, admin, deleteSurvey);
+    .get(authenticate, authorize(['admin']), getSurveyById)
+    .put(authenticate, authorize(['admin']), updateSurvey)
+    .delete(authenticate, authorize(['admin']), deleteSurvey);
 
-router.route('/admin/:id/submissions').get(protect, admin, getSurveySubmissions);
-router.route('/admin/:id/export').get(protect, admin, exportSubmissionsToExcel);
+router.route('/admin/:id/submissions').get(authenticate, authorize(['admin']), getSurveySubmissions);
+router.route('/admin/:id/export').get(authenticate, authorize(['admin']), exportSubmissionsToExcel);
 
 
 // --- USER ROUTES ---
 router.route('/')
-    .get(protect, getPublishedSurveys);
+    .get(authenticate, getPublishedSurveys);
 
 router.route('/:id')
-    .get(protect, getSurveyToFill);
+    .get(authenticate, getSurveyToFill);
 
 router.route('/:id/submit')
-    .post(protect, submitSurvey);
+    .post(authenticate, submitSurvey);
 
 export default router; 

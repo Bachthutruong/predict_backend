@@ -7,7 +7,7 @@ export interface AuthRequest extends Request {
   user?: AuthUser;
 }
 
-export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
     
@@ -37,13 +37,13 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
   }
 };
 
-export const adminMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authorize = (roles: string[]) => (req: AuthRequest, res: Response, next: NextFunction) => {
   if (!req.user) {
     return res.status(401).json({ success: false, message: 'Access denied' });
   }
   
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ success: false, message: 'Admin access required' });
+  if (!roles.includes(req.user.role)) {
+    return res.status(403).json({ success: false, message: 'Insufficient permissions' });
   }
   
   next();

@@ -1,5 +1,5 @@
 import express from 'express';
-import { authMiddleware, adminMiddleware, AuthRequest } from '../middleware/auth';
+import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { checkPredictionAuthor, checkPredictionViewAccess } from '../middleware/predictionAuth';
 import Prediction from '../models/prediction';
 import User from '../models/user';
@@ -9,12 +9,13 @@ import PointTransaction from '../models/point-transaction';
 import UserPrediction from '../models/user-prediction';
 import Order from '../models/order';
 import { encrypt } from '../utils/encryption';
+import { clearCache } from '../utils/cache';
 
 const router = express.Router();
 
 // Apply auth middleware to all routes
-router.use(authMiddleware);
-router.use(adminMiddleware);
+router.use(authenticate);
+router.use(authorize(['admin']));
 
 // Admin Dashboard Stats
 router.get('/dashboard-stats', async (req, res) => {
@@ -80,7 +81,7 @@ router.get('/dashboard-stats', async (req, res) => {
 });
 
 // Create prediction
-router.post('/predictions', async (req: AuthRequest, res) => {
+router.post('/predictions', authenticate, async (req: AuthRequest, res) => {
   try {
     const { title, description, imageUrl, correctAnswer } = req.body;
     // Coerce numeric fields from body (can arrive as strings)
@@ -104,6 +105,9 @@ router.post('/predictions', async (req: AuthRequest, res) => {
     });
 
     await prediction.save();
+
+    // Clear cache so new prediction appears immediately for users
+    clearCache();
 
     // Transform the data to match frontend expectations
     // Only show decrypted answer to the author
@@ -131,7 +135,7 @@ router.post('/predictions', async (req: AuthRequest, res) => {
 });
 
 // Get all predictions with stats
-router.get('/predictions', async (req: AuthRequest, res) => {
+router.get('/predictions', authenticate, async (req: AuthRequest, res) => {
   try {
     const predictions = await Prediction.find()
       .populate('authorId', 'name')
@@ -177,7 +181,7 @@ router.get('/predictions', async (req: AuthRequest, res) => {
 });
 
 // Get prediction details with user predictions
-router.get('/predictions/:id', checkPredictionViewAccess as any, async (req: any, res) => {
+router.get('/predictions/:id', checkPredictionViewAccess as any, authenticate, async (req: any, res) => {
   try {
     const { id } = req.params;
     const prediction = req.prediction!;
@@ -230,7 +234,7 @@ router.get('/predictions/:id', checkPredictionViewAccess as any, async (req: any
 });
 
 // Update prediction
-router.put('/predictions/:id', checkPredictionAuthor as any, async (req: any, res) => {
+router.put('/predictions/:id', checkPredictionAuthor as any, authenticate, async (req: any, res) => {
   try {
     const { id } = req.params;
     const { title, description, imageUrl, correctAnswer, status } = req.body;
@@ -253,6 +257,9 @@ router.put('/predictions/:id', checkPredictionAuthor as any, async (req: any, re
     prediction.status = status;
 
     await prediction.save();
+
+    // Clear cache so updated prediction appears immediately for users
+    clearCache();
 
     // Transform the data to match frontend expectations
     // Only show decrypted answer to the author
@@ -280,7 +287,7 @@ router.put('/predictions/:id', checkPredictionAuthor as any, async (req: any, re
 });
 
 // Delete prediction
-router.delete('/predictions/:id', checkPredictionAuthor as any, async (req: any, res) => {
+router.delete('/predictions/:id', checkPredictionAuthor as any, authenticate, async (req: any, res) => {
   try {
     const { id } = req.params;
     const prediction = req.prediction!;
@@ -290,6 +297,9 @@ router.delete('/predictions/:id', checkPredictionAuthor as any, async (req: any,
 
     // Delete the prediction
     await Prediction.findByIdAndDelete(id);
+
+    // Clear cache so deleted prediction is removed immediately for users
+    clearCache();
 
     res.json({
       success: true,
@@ -305,7 +315,7 @@ router.delete('/predictions/:id', checkPredictionAuthor as any, async (req: any,
 });
 
 // Update prediction status (only admin can close predictions)
-router.put('/predictions/:id/status', async (req: AuthRequest, res) => {
+router.put('/predictions/:id/status', authenticate, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -329,6 +339,8 @@ router.put('/predictions/:id/status', async (req: AuthRequest, res) => {
     prediction.status = status;
     await prediction.save();
 
+    // Clear cache so status change appears immediately for users
+    clearCache();
 
     // Transform the data to match frontend expectations
     const transformedPrediction = {
@@ -352,7 +364,7 @@ router.put('/predictions/:id/status', async (req: AuthRequest, res) => {
 });
 
 // Get all users
-router.get('/users', async (req, res) => {
+router.get('/users', authenticate, async (req, res) => {
   try {
     const users = await User.find()
       .sort({ createdAt: -1 });
@@ -380,7 +392,7 @@ router.get('/users', async (req, res) => {
 });
 
 // Grant points to user
-router.post('/grant-points', async (req: AuthRequest, res) => {
+router.post('/grant-points', authenticate, async (req: AuthRequest, res) => {
   try {
     const { userId, amount, notes } = req.body;
 
@@ -418,7 +430,7 @@ router.post('/grant-points', async (req: AuthRequest, res) => {
 });
 
 // Get all feedback for admin review
-router.get('/feedback', async (req, res) => {
+router.get('/feedback', authenticate, async (req, res) => {
   try {
     const feedback = await Feedback.find()
       .populate('userId', 'name email avatarUrl')
@@ -448,7 +460,7 @@ router.get('/feedback', async (req, res) => {
 });
 
 // Approve feedback and award points
-router.patch('/feedback/:id/approve', async (req: AuthRequest, res) => {
+router.patch('/feedback/:id/approve', authenticate, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const { points } = req.body;
@@ -501,7 +513,7 @@ router.patch('/feedback/:id/approve', async (req: AuthRequest, res) => {
 });
 
 // Reject feedback
-router.patch('/feedback/:id/reject', async (req: AuthRequest, res) => {
+router.patch('/feedback/:id/reject', authenticate, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
 
@@ -537,7 +549,7 @@ router.patch('/feedback/:id/reject', async (req: AuthRequest, res) => {
 });
 
 // Get all questions
-router.get('/questions', async (req, res) => {
+router.get('/questions', authenticate, async (req, res) => {
   try {
     const questions = await Question.find()
       .sort({ createdAt: -1 });
@@ -871,7 +883,7 @@ router.get('/orders', async (req, res) => {
 });
 
 // Get order by ID
-router.get('/orders/:id', async (req, res) => {
+router.get('/orders/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -897,7 +909,7 @@ router.get('/orders/:id', async (req, res) => {
 });
 
 // Get orders statistics
-router.get('/orders/stats/overview', async (req, res) => {
+router.get('/orders/stats/overview', authenticate, async (req, res) => {
   try {
     // Get all orders and group by status
     const allOrders = await Order.find({}, 'status total currency');
@@ -1029,7 +1041,7 @@ router.get('/orders/stats/overview', async (req, res) => {
 });
 
 // Update order status (for internal use)
-router.patch('/orders/:id/status', async (req: AuthRequest, res) => {
+router.patch('/orders/:id/status', authenticate, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const { status, notes } = req.body;

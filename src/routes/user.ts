@@ -1,6 +1,6 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authenticate, AuthRequest } from '../middleware/auth';
 import User from '../models/user';
 import PointTransaction from '../models/point-transaction';
 import Referral from '../models/referral';
@@ -9,7 +9,7 @@ import { Response } from 'express';
 const router = express.Router();
 
 // Get current user profile
-router.get('/profile', authMiddleware, async (req: AuthRequest, res) => {
+router.get('/profile', authenticate, async (req: AuthRequest, res) => {
   try {
     const user = await User.findById(req.user!.id);
     if (!user) {
@@ -39,7 +39,7 @@ router.get('/profile', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // Update user profile
-router.put('/profile', authMiddleware, async (req: AuthRequest, res) => {
+router.put('/profile', authenticate, async (req: AuthRequest, res) => {
   try {
     const { 
       name, 
@@ -103,7 +103,7 @@ router.put('/profile', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // Change user password
-router.put('/profile/password', authMiddleware, async (req: AuthRequest, res) => {
+router.put('/profile/password', authenticate, async (req: AuthRequest, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
     
@@ -175,7 +175,7 @@ router.put('/profile/password', authMiddleware, async (req: AuthRequest, res) =>
 });
 
 // Get user's point transactions
-router.get('/transactions', authMiddleware, async (req: AuthRequest, res) => {
+router.get('/transactions', authenticate, async (req: AuthRequest, res) => {
   try {
     const transactions = await PointTransaction.find({ userId: req.user!.id })
       .populate('adminId', 'name')
@@ -204,7 +204,7 @@ router.get('/transactions', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // Get user referrals
-router.get('/referrals', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/referrals', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -257,7 +257,7 @@ router.get('/referrals', authMiddleware, async (req: AuthRequest, res: Response)
 });
 
 // Set referral code (only if not set)
-router.post('/set-referral-code', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/set-referral-code', authenticate, async (req: AuthRequest, res) => {
   try {
     const { referralCode } = req.body;
     if (!referralCode || typeof referralCode !== 'string' || referralCode.trim().length < 4) {

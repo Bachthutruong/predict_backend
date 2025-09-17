@@ -90,9 +90,10 @@ const createIndexes = async () => {
         // SurveySubmission indexes
         await survey_submission_1.default.collection.createIndex({ surveyId: 1 });
         await survey_submission_1.default.collection.createIndex({ userId: 1 });
-        // CheckIn indexes
-        await check_in_1.default.collection.createIndex({ userId: 1, date: 1 }, { unique: true });
-        await check_in_1.default.collection.createIndex({ date: 1 });
+        // CheckIn indexes - align with schema field names
+        // Schema already defines a unique index with partialFilterExpression on { userId, checkInDate }
+        // Here we only add a supporting index on checkInDate to help queries
+        await check_in_1.default.collection.createIndex({ checkInDate: 1 });
         // PointTransaction indexes
         await point_transaction_1.default.collection.createIndex({ userId: 1 });
         await point_transaction_1.default.collection.createIndex({ type: 1 });

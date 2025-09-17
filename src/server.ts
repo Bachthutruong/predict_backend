@@ -8,6 +8,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 // Rate limiting completely removed from dependencies
 import dbConnect from './config/database';
+import { initializeDefaultSystemSettings } from './models/system-settings';
 import { createIndexes } from './utils/seed';
 
 // Import routes
@@ -25,6 +26,16 @@ import surveyRoutes from './routes/survey'; // Import survey routes
 import votingRoutes from './routes/voting'; // Import voting routes
 import contestRoutes from './routes/contest'; // Import contest routes
 import adminContestRoutes from './routes/adminContest'; // Import admin contest routes
+import adminProductRoutes from './routes/adminProduct'; // Import admin product routes
+import adminOrderRoutes from './routes/adminOrder'; // Import admin order routes
+import adminSystemOrderRoutes from './routes/adminSystemOrder'; // New system order routes
+import adminCouponRoutes from './routes/adminCoupon'; // Import admin coupon routes
+import settingsRoutes from './routes/settings';
+import adminSuggestionPackageRoutes from './routes/adminSuggestionPackage'; // Import admin suggestion package routes
+import adminCategoryRoutes from './routes/adminCategory'; // Import admin category routes
+import shopRoutes from './routes/shop'; // Import shop routes
+import cartRoutes from './routes/cart'; // Import cart routes
+import orderRoutes from './routes/order'; // Import order routes
 console.log('🔍 Webhook routes imported:', typeof webhookRoutes, webhookRoutes);
 
 const app = express();
@@ -122,6 +133,10 @@ dbConnect()
     return createIndexes();
   })
   .then(() => {
+    // Initialize default settings after DB connected
+    return initializeDefaultSystemSettings();
+  })
+  .then(() => {
     console.log('✅ Server setup completed');
   })
   .catch((error) => {
@@ -195,8 +210,17 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/predictions', predictionRoutes);
 app.use('/api/contests', contestRoutes); // Use contest routes
-app.use('/api/admin', adminRoutes);
+// Specific admin sub-routers MUST be mounted before generic '/api/admin' to avoid route conflicts
 app.use('/api/admin/contests', adminContestRoutes); // Use admin contest routes
+app.use('/api/admin/products', adminProductRoutes); // Use admin product routes
+// Preserve legacy WooCommerce admin orders under /api/admin/orders (unchanged)
+app.use('/api/admin/orders', adminOrderRoutes);
+// New: System orders under a separate namespace to avoid confusion with Woo
+app.use('/api/admin/system-orders', adminSystemOrderRoutes);
+app.use('/api/admin/coupons', adminCouponRoutes); // Use admin coupon routes
+app.use('/api/admin/suggestion-packages', adminSuggestionPackageRoutes); // Use admin suggestion package routes
+app.use('/api/admin/categories', adminCategoryRoutes); // Use admin category routes
+app.use('/api/admin', adminRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/check-in', checkInRoutes);
 app.use('/api/feedback', feedbackRoutes);
@@ -204,6 +228,10 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/cloudinary', cloudinaryRoutes);
 app.use('/api/surveys', surveyRoutes); // Use survey routes
 app.use('/api/voting', votingRoutes); // Use voting routes
+app.use('/api/shop', shopRoutes); // Use shop routes
+app.use('/api/cart', cartRoutes); // Use cart routes
+app.use('/api/orders', orderRoutes); // Use order routes
+app.use('/api/settings', settingsRoutes); // Settings routes (public + admin)
 
 // 404 handler
 app.use('*', (req, res) => {

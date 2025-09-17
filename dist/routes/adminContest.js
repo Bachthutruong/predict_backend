@@ -8,22 +8,23 @@ const auth_1 = require("../middleware/auth");
 const adminContest_controller_1 = require("../controllers/adminContest.controller");
 const router = express_1.default.Router();
 // Apply auth middleware to all routes
-router.use(auth_1.authMiddleware);
+router.use(auth_1.authenticate);
+router.use((0, auth_1.authorize)(['admin']));
 // Create a new contest
-router.post('/', adminContest_controller_1.createContest);
+router.post('/', auth_1.authenticate, (0, auth_1.authorize)(['admin']), adminContest_controller_1.createContest);
 // Get all contests
-router.get('/', adminContest_controller_1.getContests);
+router.get('/', auth_1.authenticate, (0, auth_1.authorize)(['admin']), adminContest_controller_1.getContests);
 // Get a single contest by ID
-router.get('/:id', adminContest_controller_1.getContestById);
+router.get('/:id', auth_1.authenticate, (0, auth_1.authorize)(['admin']), adminContest_controller_1.getContestById);
 // Update a contest
-router.put('/:id', adminContest_controller_1.updateContest);
+router.put('/:id', auth_1.authenticate, (0, auth_1.authorize)(['admin']), adminContest_controller_1.updateContest);
 // Delete a contest
-router.delete('/:id', adminContest_controller_1.deleteContest);
+router.delete('/:id', auth_1.authenticate, (0, auth_1.authorize)(['admin']), adminContest_controller_1.deleteContest);
 // Publish answer for a contest
-router.put('/:id/publish-answer', adminContest_controller_1.publishAnswer);
+router.put('/:id/publish-answer', auth_1.authenticate, (0, auth_1.authorize)(['admin']), adminContest_controller_1.publishAnswer);
 // Get contest submissions
-router.get('/:id/submissions', adminContest_controller_1.getContestSubmissions);
+router.get('/:id/submissions', auth_1.authenticate, (0, auth_1.authorize)(['admin']), adminContest_controller_1.getContestSubmissions);
 // Get contest statistics
-router.get('/:id/statistics', adminContest_controller_1.getContestStatistics);
+router.get('/:id/statistics', auth_1.authenticate, (0, auth_1.authorize)(['admin']), adminContest_controller_1.getContestStatistics);
 exports.default = router;
 //# sourceMappingURL=adminContest.js.map

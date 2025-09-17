@@ -1,5 +1,5 @@
 import express from 'express';
-import { authMiddleware, adminMiddleware } from '../middleware/auth';
+import {  authenticate, authorize } from '../middleware/auth';
 import * as adminVotingController from '../controllers/adminVoting.controller';
 import * as userVotingController from '../controllers/userVoting.controller';
 
@@ -10,7 +10,7 @@ const optionalAuth = async (req: any, res: any, next: any) => {
     
     if (token) {
       // If token exists, try to authenticate
-      await authMiddleware(req, res, () => {});
+      await authenticate(req, res, () => {});
     }
     // Continue regardless of authentication result
     next();
@@ -21,7 +21,7 @@ const optionalAuth = async (req: any, res: any, next: any) => {
 };
 
 // Combined auth + admin middleware
-const adminAuth = [authMiddleware, adminMiddleware];
+const adminAuth = [authenticate, authorize(['admin'])];
 
 const router = express.Router();
 
@@ -34,13 +34,13 @@ router.get('/campaigns/:id', optionalAuth, userVotingController.getVotingCampaig
 
 // =================== USER ROUTES (Auth required) ===================
 // Vote for an entry
-router.post('/campaigns/:campaignId/entries/:entryId/vote', authMiddleware, userVotingController.voteForEntry);
+router.post('/campaigns/:campaignId/entries/:entryId/vote', authenticate, userVotingController.voteForEntry);
 
 // Remove vote
-router.delete('/campaigns/:campaignId/entries/:entryId/vote', authMiddleware, userVotingController.removeVote);
+router.delete('/campaigns/:campaignId/entries/:entryId/vote', authenticate, userVotingController.removeVote);
 
 // Get user's voting history
-router.get('/my-votes', authMiddleware, userVotingController.getUserVotingHistory);
+router.get('/my-votes', authenticate, userVotingController.getUserVotingHistory);
 
 // =================== ADMIN ROUTES (Admin auth required) ===================
 // Campaign management

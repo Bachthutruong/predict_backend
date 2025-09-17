@@ -16,17 +16,29 @@ SystemSettingsSchema.set('toJSON', {
 
 const SystemSettings = models?.SystemSettings || model('SystemSettings', SystemSettingsSchema);
 
-// Initialize default settings
-SystemSettings.find({}).then(settings => {
-  if (settings.length === 0) {
-    const defaultSettings = [
-      { settingKey: 'checkInPoints', settingValue: 10, description: 'Points awarded for daily check-in' },
-      { settingKey: 'streakBonusPoints', settingValue: 50, description: 'Bonus points for 7-day check-in streak' },
-      { settingKey: 'referralPoints', settingValue: 100, description: 'Points for successful referral' },
-      { settingKey: 'milestone10Points', settingValue: 500, description: 'Bonus points for every 10 successful referrals' },
-    ];
-    SystemSettings.insertMany(defaultSettings);
+export const initializeDefaultSystemSettings = async () => {
+  try {
+    const count = await SystemSettings.countDocuments({});
+    if (count === 0) {
+      const defaultSettings = [
+        { settingKey: 'checkInPoints', settingValue: 10, description: 'Points awarded for daily check-in' },
+        { settingKey: 'streakBonusPoints', settingValue: 50, description: 'Bonus points for 7-day check-in streak' },
+        { settingKey: 'referralPoints', settingValue: 100, description: 'Points for successful referral' },
+        { settingKey: 'milestone10Points', settingValue: 500, description: 'Bonus points for every 10 successful referrals' },
+        { settingKey: 'pointPrice', settingValue: 1, description: 'Currency per 1 point' },
+      ];
+      await SystemSettings.insertMany(defaultSettings);
+    } else {
+      // Ensure pointPrice exists
+      await SystemSettings.updateOne(
+        { settingKey: 'pointPrice' },
+        { $setOnInsert: { settingKey: 'pointPrice', settingValue: 1, description: 'Currency per 1 point' } },
+        { upsert: true }
+      );
+    }
+  } catch (e) {
+    console.error('initializeDefaultSystemSettings error:', e);
   }
-});
+};
 
-export default SystemSettings; 
+export default SystemSettings;

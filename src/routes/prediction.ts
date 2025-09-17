@@ -1,11 +1,13 @@
 import express from 'express';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authenticate, AuthRequest } from '../middleware/auth';
 import { checkPredictionViewAccess } from '../middleware/predictionAuth';
 import Prediction from '../models/prediction';
 import UserPrediction from '../models/user-prediction';
 import User from '../models/user';
 import PointTransaction from '../models/point-transaction';
 import { decrypt } from '../utils/encryption';
+import UserSuggestion from '../models/UserSuggestion';
+import { getCache, setCache, clearCache, isCacheValid } from '../utils/cache';
 
 // Extend AuthRequest to include prediction and canViewAnswer
 interface PredictionAuthRequest extends AuthRequest {
@@ -15,27 +17,25 @@ interface PredictionAuthRequest extends AuthRequest {
 
 const router = express.Router();
 
-// Simple in-memory cache for active predictions (5 minutes)
-let activePredictionsCache: any = null;
-let cacheTimestamp: number = 0;
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+// Cache is now managed by utils/cache.ts
 
 // Get all active predictions
 router.get('/', async (req, res) => {
   try {
     // Check cache first
-    const now = Date.now();
-    if (activePredictionsCache && (now - cacheTimestamp) < CACHE_DURATION) {
+    if (isCacheValid()) {
+      const { cache } = getCache();
       return res.json({
         success: true,
-        data: activePredictionsCache,
+        data: cache,
         cached: true
       });
     }
 
-    // Fetch from database with optimized query
-    const predictions = await Prediction.find({ status: 'active' })
+    // Fetch from database with optimized query - include both active and finished predictions
+    const predictions = await Prediction.find({ status: { $in: ['active', 'finished'] } })
       .populate('authorId', 'name')
+      .populate('winnerId', 'name avatarUrl')
       .sort({ createdAt: -1 })
       .lean() // Use lean() for better performance
       .exec();
@@ -47,8 +47,7 @@ router.get('/', async (req, res) => {
     }));
 
     // Update cache
-    activePredictionsCache = transformedPredictions;
-    cacheTimestamp = now;
+    setCache(transformedPredictions);
 
     res.json({
       success: true,
@@ -71,7 +70,9 @@ router.get('/:id', checkPredictionViewAccess as any, async (req: any, res) => {
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
     
-    const prediction = req.prediction!;
+    const prediction = await Prediction.findById(req.params.id)
+      .populate('authorId', 'name')
+      .populate('winnerId', 'name avatarUrl');
     const canViewAnswer = req.canViewAnswer!;
 
     // Get paginated user predictions with optimized query
@@ -120,7 +121,7 @@ router.get('/:id', checkPredictionViewAccess as any, async (req: any, res) => {
 });
 
 // Submit prediction
-router.post('/:id/submit', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/:id/submit', authenticate, async (req: AuthRequest, res) => {
   try {
     const { guess } = req.body;
     const predictionId = req.params.id;
@@ -187,13 +188,13 @@ router.post('/:id/submit', authMiddleware, async (req: AuthRequest, res) => {
       user.points += bonusPoints;
       await user.save();
 
-      // Mark prediction finished and set winner
+      // Mark prediction finished and set winner (but keep it visible)
       prediction.status = 'finished';
       prediction.winnerId = user._id;
       await prediction.save();
 
       // Clear active cache so list updates instantly
-      activePredictionsCache = null;
+      clearCache();
 
       // Record the transaction
       await PointTransaction.create({
@@ -235,3 +236,79 @@ router.post('/:id/submit', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 export default router; 
+
+// Use a hint from user's suggestion packages for a prediction
+router.post('/:id/use-hint', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const predictionId = req.params.id;
+    const userId = req.user!.id;
+
+    const prediction = await Prediction.findById(predictionId);
+    if (!prediction) {
+      return res.status(404).json({ success: false, message: 'Prediction not found' });
+    }
+
+    // Pick an active user suggestion package with remaining > 0
+    const now = new Date();
+    const userSuggestion = await UserSuggestion.findOne({
+      user: userId,
+      isActive: true,
+      validFrom: { $lte: now },
+      validUntil: { $gte: now },
+      remainingSuggestions: { $gt: 0 },
+    }).sort({ createdAt: 1 });
+
+    if (!userSuggestion) {
+      return res.status(400).json({ success: false, message: 'Bạn không còn lượt gợi ý. Vui lòng mua gói gợi ý.' });
+    }
+
+    // Consume one suggestion
+    userSuggestion.usedSuggestions += 1;
+    userSuggestion.remainingSuggestions = Math.max(0, userSuggestion.totalSuggestions - userSuggestion.usedSuggestions);
+    await userSuggestion.save();
+
+    // Build a safe hint from prediction data
+    const rawHint: string = (prediction as any)['data-ai-hint'] || '';
+    const baseHint = rawHint && typeof rawHint === 'string' ? rawHint : '';
+
+    // Generate varied, question-related hints from title/description
+    const textPool = [prediction.title || '', prediction.description || '']
+      .join(' ')
+      .toLowerCase()
+      .replace(/[^a-z0-9àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ\s]/g, ' ');
+    const words = Array.from(new Set(textPool.split(/\s+/).filter(w => w.length >= 4))).slice(0, 12);
+    const keywords = words.slice(0, 6);
+
+    const pick = (idx: number, arr: string[]) => (arr.length ? arr[idx % arr.length] : '');
+    const k1 = pick(0, keywords);
+    const k2 = pick(1, keywords);
+    const k3 = pick(2, keywords);
+
+    const candidates: string[] = [
+      baseHint || '',
+      k1 ? `Hãy tập trung vào từ khóa: "${k1}".` : '',
+      k2 ? `Trong mô tả có chi tiết liên quan đến "${k2}".` : '',
+      k3 ? `Xem lại phần mở đầu, có gợi ý về "${k3}".` : '',
+      'Đối chiếu tiêu đề với mô tả để tìm mấu chốt.',
+      'Loại trừ những đáp án mâu thuẫn với mô tả.',
+      'Tìm số liệu, thời gian hoặc tên riêng trong mô tả.',
+      prediction.title ? `Từ tiêu đề: "${prediction.title}", rút ra ý chính rồi so sánh với đáp án của bạn.` : '',
+    ].filter(Boolean);
+
+    // Rotate hint by current usedSuggestions to avoid repeating the same text many times
+    const indexSeed = userSuggestion.usedSuggestions - 1; // just consumed one above
+    const hint = candidates[candidates.length ? (indexSeed % candidates.length + candidates.length) % candidates.length : 0] || 'Gợi ý: Xem kỹ các chi tiết quan trọng trong mô tả.';
+
+    return res.json({
+      success: true,
+      data: {
+        hint,
+        remaining: userSuggestion.remainingSuggestions,
+        total: userSuggestion.totalSuggestions,
+      }
+    });
+  } catch (error) {
+    console.error('Use hint error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});

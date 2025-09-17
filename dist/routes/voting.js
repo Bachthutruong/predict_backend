@@ -46,7 +46,7 @@ const optionalAuth = async (req, res, next) => {
         const token = req.header('Authorization')?.replace('Bearer ', '');
         if (token) {
             // If token exists, try to authenticate
-            await (0, auth_1.authMiddleware)(req, res, () => { });
+            await (0, auth_1.authenticate)(req, res, () => { });
         }
         // Continue regardless of authentication result
         next();
@@ -57,7 +57,7 @@ const optionalAuth = async (req, res, next) => {
     }
 };
 // Combined auth + admin middleware
-const adminAuth = [auth_1.authMiddleware, auth_1.adminMiddleware];
+const adminAuth = [auth_1.authenticate, (0, auth_1.authorize)(['admin'])];
 const router = express_1.default.Router();
 // =================== PUBLIC ROUTES (No auth required) ===================
 // Get all active voting campaigns - public view
@@ -66,11 +66,11 @@ router.get('/campaigns', userVotingController.getActiveVotingCampaigns);
 router.get('/campaigns/:id', optionalAuth, userVotingController.getVotingCampaignDetail);
 // =================== USER ROUTES (Auth required) ===================
 // Vote for an entry
-router.post('/campaigns/:campaignId/entries/:entryId/vote', auth_1.authMiddleware, userVotingController.voteForEntry);
+router.post('/campaigns/:campaignId/entries/:entryId/vote', auth_1.authenticate, userVotingController.voteForEntry);
 // Remove vote
-router.delete('/campaigns/:campaignId/entries/:entryId/vote', auth_1.authMiddleware, userVotingController.removeVote);
+router.delete('/campaigns/:campaignId/entries/:entryId/vote', auth_1.authenticate, userVotingController.removeVote);
 // Get user's voting history
-router.get('/my-votes', auth_1.authMiddleware, userVotingController.getUserVotingHistory);
+router.get('/my-votes', auth_1.authenticate, userVotingController.getUserVotingHistory);
 // =================== ADMIN ROUTES (Admin auth required) ===================
 // Campaign management
 router.get('/admin/campaigns', adminAuth, adminVotingController.getVotingCampaigns);

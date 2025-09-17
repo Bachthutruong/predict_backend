@@ -1,0 +1,1 @@
+{"version":3,"file":"predictionAuth.d.ts","sourceRoot":"","sources":["../../src/middleware/predictionAuth.ts"],"names":[],"mappings":"AAAA,OAAO,EAAW,QAAQ,EAAE,YAAY,EAAE,MAAM,SAAS,CAAC;AAU1D;;;GAGG;AACH,eAAO,MAAM,qBAAqB,GAAU,KAAK,GAAG,EAAE,KAAK,QAAQ,EAAE,MAAM,YAAY,4DAsCtF,CAAC;AAEF;;;GAGG;AACH,eAAO,MAAM,yBAAyB,GAAU,KAAK,GAAG,EAAE,KAAK,QAAQ,EAAE,MAAM,YAAY,4DAwB1F,CAAC"}

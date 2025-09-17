@@ -14,7 +14,7 @@ cloudinary_1.v2.config({
     api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 // Generate signature for signed upload
-router.post('/signature', auth_1.authMiddleware, async (req, res) => {
+router.post('/signature', auth_1.authenticate, async (req, res) => {
     try {
         const { timestamp, folder = 'predict-win' } = req.body;
         // Parameters for upload

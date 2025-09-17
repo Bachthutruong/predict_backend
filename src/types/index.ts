@@ -13,6 +13,15 @@ export type User = {
   consecutiveCheckIns: number;
   lastCheckInDate?: string;
   totalSuccessfulReferrals: number;
+  
+  // Skip feature
+  skipCount: number;
+  maxSkips: number;
+  lastSkipResetDate?: string;
+  
+  // Answered questions tracking
+  answeredQuestionIds: string[];
+  
   createdAt: string;
 };
 

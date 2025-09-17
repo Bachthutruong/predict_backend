@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const auth_1 = require("../middleware/auth");
+const predictionAuth_1 = require("../middleware/predictionAuth");
 const prediction_1 = __importDefault(require("../models/prediction"));
 const user_1 = __importDefault(require("../models/user"));
 const feedback_1 = __importDefault(require("../models/feedback"));
@@ -12,10 +13,12 @@ const question_1 = __importDefault(require("../models/question"));
 const point_transaction_1 = __importDefault(require("../models/point-transaction"));
 const user_prediction_1 = __importDefault(require("../models/user-prediction"));
 const order_1 = __importDefault(require("../models/order"));
+const encryption_1 = require("../utils/encryption");
+const cache_1 = require("../utils/cache");
 const router = express_1.default.Router();
 // Apply auth middleware to all routes
-router.use(auth_1.authMiddleware);
-router.use(auth_1.adminMiddleware);
+router.use(auth_1.authenticate);
+router.use((0, auth_1.authorize)(['admin']));
 // Admin Dashboard Stats
 router.get('/dashboard-stats', async (req, res) => {
     try {
@@ -69,23 +72,38 @@ router.get('/dashboard-stats', async (req, res) => {
     }
 });
 // Create prediction
-router.post('/predictions', async (req, res) => {
+router.post('/predictions', auth_1.authenticate, async (req, res) => {
     try {
-        const { title, description, imageUrl, correctAnswer, pointsCost } = req.body;
+        const { title, description, imageUrl, correctAnswer } = req.body;
+        // Coerce numeric fields from body (can arrive as strings)
+        const pointsCost = Number(req.body.pointsCost);
+        const rewardPointsInput = req.body.rewardPoints;
+        const rewardPoints = Number(rewardPointsInput);
+        // Encrypt the answer before storing
+        const encryptedAnswer = (0, encryption_1.encrypt)(correctAnswer);
         const prediction = new prediction_1.default({
             title,
             description,
             imageUrl,
-            answer: correctAnswer,
-            pointsCost,
+            answer: encryptedAnswer,
+            pointsCost: isNaN(pointsCost) ? 0 : pointsCost,
+            rewardPoints: !isNaN(rewardPoints) && rewardPoints > 0
+                ? rewardPoints
+                : Math.round((isNaN(pointsCost) ? 0 : pointsCost) * 1.5),
             authorId: req.user.id
         });
         await prediction.save();
+        // Clear cache so new prediction appears immediately for users
+        (0, cache_1.clearCache)();
         // Transform the data to match frontend expectations
+        // Only show decrypted answer to the author
         const transformedPrediction = {
             ...prediction.toObject(),
             id: prediction._id.toString(), // Ensure ID is properly set
-            correctAnswer: prediction.answer
+            // For admin (author) who just created, return decrypted answer in both fields
+            answer: prediction.getDecryptedAnswer(),
+            correctAnswer: prediction.getDecryptedAnswer(),
+            rewardPoints: prediction.rewardPoints
         };
         res.status(201).json({
             success: true,
@@ -102,7 +120,7 @@ router.post('/predictions', async (req, res) => {
     }
 });
 // Get all predictions with stats
-router.get('/predictions', async (req, res) => {
+router.get('/predictions', auth_1.authenticate, async (req, res) => {
     try {
         const predictions = await prediction_1.default.find()
             .populate('authorId', 'name')
@@ -115,13 +133,17 @@ router.get('/predictions', async (req, res) => {
             const totalPoints = userPredictions.reduce((sum, up) => sum + up.pointsSpent, 0);
             const averagePoints = totalParticipants > 0 ? Math.round(totalPoints / totalParticipants) : 0;
             const obj = prediction.toObject();
+            const isAuthor = prediction.isAuthor(req.user.id);
             return {
                 ...obj,
                 id: obj._id.toString(), // Ensure ID is properly set
-                correctAnswer: obj.answer,
+                answer: isAuthor ? prediction.getDecryptedAnswer() : '***ENCRYPTED***',
+                correctAnswer: isAuthor ? prediction.getDecryptedAnswer() : '***ENCRYPTED***',
+                rewardPoints: prediction.rewardPoints,
                 totalParticipants,
                 totalPoints,
-                averagePoints
+                averagePoints,
+                isAuthor // Add flag to indicate if current user is author
             };
         }));
         res.json({
@@ -138,25 +160,11 @@ router.get('/predictions', async (req, res) => {
     }
 });
 // Get prediction details with user predictions
-router.get('/predictions/:id', async (req, res) => {
+router.get('/predictions/:id', predictionAuth_1.checkPredictionViewAccess, auth_1.authenticate, async (req, res) => {
     try {
         const { id } = req.params;
-        // Validate ObjectId
-        if (!id || id === 'undefined' || id === 'null') {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid prediction ID'
-            });
-        }
-        const prediction = await prediction_1.default.findById(id)
-            .populate('authorId', 'name')
-            .populate('winnerId', 'name avatarUrl');
-        if (!prediction) {
-            return res.status(404).json({
-                success: false,
-                message: 'Prediction not found'
-            });
-        }
+        const prediction = req.prediction;
+        const canViewAnswer = req.canViewAnswer;
         // Get user predictions for this prediction
         const userPredictions = await user_prediction_1.default.find({ predictionId: id })
             .populate('userId', 'name avatarUrl')
@@ -179,7 +187,8 @@ router.get('/predictions/:id', async (req, res) => {
         const predictionWithStats = {
             ...prediction.toObject(),
             id: prediction._id.toString(), // Ensure ID is properly set
-            correctAnswer: prediction.answer,
+            answer: canViewAnswer ? prediction.getDecryptedAnswer() : '***ENCRYPTED***',
+            correctAnswer: canViewAnswer ? prediction.getDecryptedAnswer() : '***ENCRYPTED***',
             totalPredictions,
             correctPredictions,
             totalPointsAwarded,
@@ -199,30 +208,37 @@ router.get('/predictions/:id', async (req, res) => {
     }
 });
 // Update prediction
-router.put('/predictions/:id', async (req, res) => {
+router.put('/predictions/:id', predictionAuth_1.checkPredictionAuthor, auth_1.authenticate, async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, imageUrl, correctAnswer, pointsCost, status } = req.body;
-        const prediction = await prediction_1.default.findById(id);
-        if (!prediction) {
-            return res.status(404).json({
-                success: false,
-                message: 'Prediction not found'
-            });
-        }
+        const { title, description, imageUrl, correctAnswer, status } = req.body;
+        const pointsCost = Number(req.body.pointsCost);
+        const rewardPointsBody = Number(req.body.rewardPoints);
+        const prediction = req.prediction;
+        // Encrypt the answer before storing
+        const encryptedAnswer = (0, encryption_1.encrypt)(correctAnswer);
         // Update prediction fields
         prediction.title = title;
         prediction.description = description;
         prediction.imageUrl = imageUrl;
-        prediction.answer = correctAnswer;
-        prediction.pointsCost = pointsCost;
+        prediction.answer = encryptedAnswer;
+        prediction.pointsCost = isNaN(pointsCost) ? prediction.pointsCost : pointsCost;
+        prediction.rewardPoints = !isNaN(rewardPointsBody) && rewardPointsBody > 0
+            ? rewardPointsBody
+            : Math.round((isNaN(pointsCost) ? prediction.pointsCost : pointsCost) * 1.5);
         prediction.status = status;
         await prediction.save();
+        // Clear cache so updated prediction appears immediately for users
+        (0, cache_1.clearCache)();
         // Transform the data to match frontend expectations
+        // Only show decrypted answer to the author
         const transformedPrediction = {
             ...prediction.toObject(),
             id: prediction._id.toString(), // Ensure ID is properly set
-            correctAnswer: prediction.answer
+            // For author, keep decrypted answer in both fields
+            answer: prediction.getDecryptedAnswer(),
+            correctAnswer: prediction.getDecryptedAnswer(),
+            rewardPoints: prediction.rewardPoints
         };
         res.json({
             success: true,
@@ -239,20 +255,16 @@ router.put('/predictions/:id', async (req, res) => {
     }
 });
 // Delete prediction
-router.delete('/predictions/:id', async (req, res) => {
+router.delete('/predictions/:id', predictionAuth_1.checkPredictionAuthor, auth_1.authenticate, async (req, res) => {
     try {
         const { id } = req.params;
-        const prediction = await prediction_1.default.findById(id);
-        if (!prediction) {
-            return res.status(404).json({
-                success: false,
-                message: 'Prediction not found'
-            });
-        }
+        const prediction = req.prediction;
         // Delete associated user predictions
         await user_prediction_1.default.deleteMany({ predictionId: id });
         // Delete the prediction
         await prediction_1.default.findByIdAndDelete(id);
+        // Clear cache so deleted prediction is removed immediately for users
+        (0, cache_1.clearCache)();
         res.json({
             success: true,
             message: 'Prediction deleted successfully'
@@ -266,8 +278,8 @@ router.delete('/predictions/:id', async (req, res) => {
         });
     }
 });
-// Update prediction status
-router.put('/predictions/:id/status', async (req, res) => {
+// Update prediction status (only admin can close predictions)
+router.put('/predictions/:id/status', auth_1.authenticate, async (req, res) => {
     try {
         const { id } = req.params;
         const { status } = req.body;
@@ -278,13 +290,22 @@ router.put('/predictions/:id/status', async (req, res) => {
                 message: 'Prediction not found'
             });
         }
+        // Only allow admin to close predictions
+        if (status === 'finished' && req.user.role !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Only admin can close predictions'
+            });
+        }
         prediction.status = status;
         await prediction.save();
+        // Clear cache so status change appears immediately for users
+        (0, cache_1.clearCache)();
         // Transform the data to match frontend expectations
         const transformedPrediction = {
             ...prediction.toObject(),
             id: prediction._id.toString(), // Ensure ID is properly set
-            correctAnswer: prediction.answer
+            correctAnswer: prediction.isAuthor(req.user.id) ? prediction.getDecryptedAnswer() : '***ENCRYPTED***'
         };
         res.json({
             success: true,
@@ -301,7 +322,7 @@ router.put('/predictions/:id/status', async (req, res) => {
     }
 });
 // Get all users
-router.get('/users', async (req, res) => {
+router.get('/users', auth_1.authenticate, async (req, res) => {
     try {
         const users = await user_1.default.find()
             .sort({ createdAt: -1 });
@@ -327,7 +348,7 @@ router.get('/users', async (req, res) => {
     }
 });
 // Grant points to user
-router.post('/grant-points', async (req, res) => {
+router.post('/grant-points', auth_1.authenticate, async (req, res) => {
     try {
         const { userId, amount, notes } = req.body;
         const user = await user_1.default.findById(userId);
@@ -361,7 +382,7 @@ router.post('/grant-points', async (req, res) => {
     }
 });
 // Get all feedback for admin review
-router.get('/feedback', async (req, res) => {
+router.get('/feedback', auth_1.authenticate, async (req, res) => {
     try {
         const feedback = await feedback_1.default.find()
             .populate('userId', 'name email avatarUrl')
@@ -389,7 +410,7 @@ router.get('/feedback', async (req, res) => {
     }
 });
 // Approve feedback and award points
-router.patch('/feedback/:id/approve', async (req, res) => {
+router.patch('/feedback/:id/approve', auth_1.authenticate, async (req, res) => {
     try {
         const { id } = req.params;
         const { points } = req.body;
@@ -436,7 +457,7 @@ router.patch('/feedback/:id/approve', async (req, res) => {
     }
 });
 // Reject feedback
-router.patch('/feedback/:id/reject', async (req, res) => {
+router.patch('/feedback/:id/reject', auth_1.authenticate, async (req, res) => {
     try {
         const { id } = req.params;
         const feedback = await feedback_1.default.findById(id);
@@ -468,7 +489,7 @@ router.patch('/feedback/:id/reject', async (req, res) => {
     }
 });
 // Get all questions
-router.get('/questions', async (req, res) => {
+router.get('/questions', auth_1.authenticate, async (req, res) => {
     try {
         const questions = await question_1.default.find()
             .sort({ createdAt: -1 });
@@ -770,7 +791,7 @@ router.get('/orders', async (req, res) => {
     }
 });
 // Get order by ID
-router.get('/orders/:id', async (req, res) => {
+router.get('/orders/:id', auth_1.authenticate, async (req, res) => {
     try {
         const { id } = req.params;
         const order = await order_1.default.findById(id);
@@ -794,7 +815,7 @@ router.get('/orders/:id', async (req, res) => {
     }
 });
 // Get orders statistics
-router.get('/orders/stats/overview', async (req, res) => {
+router.get('/orders/stats/overview', auth_1.authenticate, async (req, res) => {
     try {
         // Get all orders and group by status
         const allOrders = await order_1.default.find({}, 'status total currency');
@@ -918,7 +939,7 @@ router.get('/orders/stats/overview', async (req, res) => {
     }
 });
 // Update order status (for internal use)
-router.patch('/orders/:id/status', async (req, res) => {
+router.patch('/orders/:id/status', auth_1.authenticate, async (req, res) => {
     try {
         const { id } = req.params;
         const { status, notes } = req.body;

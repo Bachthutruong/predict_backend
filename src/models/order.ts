@@ -1,156 +1,119 @@
 import mongoose, { Schema, models, model } from 'mongoose';
 
+const OrderItemSchema = new Schema({
+  product: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
+  quantity: { type: Number, required: true, min: 1 },
+  price: { type: Number, required: true, min: 0 }, // Price at time of purchase
+  pointsUsed: { type: Number, default: 0 }, // Points used for this item
+  pointsEarned: { type: Number, default: 0 }, // Points earned from this item
+  variant: {
+    name: { type: String, default: '' },
+    value: { type: String, default: '' }
+  }
+});
+
 const OrderSchema = new Schema({
-  // WordPress/WooCommerce Order ID
-  wordpressOrderId: { type: Number, required: false, unique: true, index: true },
+  orderNumber: { type: String, unique: true, required: true, index: true },
+  user: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   
-  // Order Status
-  status: {
-    type: String,
-    enum: ['pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed', 'trash', 'ecpay-shipping', 'ecpay'],
-    required: false,
-    index: true,
-    default: 'pending'
+  // Order items
+  items: [OrderItemSchema],
+  
+  // Pricing
+  subtotal: { type: Number, required: true, min: 0 },
+  shippingCost: { type: Number, default: 0, min: 0 },
+  discountAmount: { type: Number, default: 0, min: 0 },
+  totalAmount: { type: Number, required: true, min: 0 },
+  
+  // Points
+  pointsUsed: { type: Number, default: 0 },
+  pointsEarned: { type: Number, default: 0 },
+  
+  // Coupon
+  coupon: { type: Schema.Types.ObjectId, ref: 'Coupon' },
+  couponCode: { type: String, default: '' },
+  
+  // Payment
+  paymentMethod: { 
+    type: String, 
+    enum: ['bank_transfer', 'cod'], // cod = cash on delivery
+    required: true 
+  },
+  paymentStatus: { 
+    type: String, 
+    enum: ['pending', 'waiting_confirmation', 'paid', 'failed', 'refunded'],
+    default: 'pending',
+    index: true
   },
   
-  // Customer Information
-  customerEmail: { type: String, required: false, index: true, default: 'unknown@example.com' },
-  customerName: { type: String, required: false, default: 'Unknown Customer' },
-  customerPhone: { type: String },
-  
-  // Order Financial Information
-  total: { type: String, required: false, default: '0' },
-  currency: { type: String, required: false, default: 'TWD' },
-  
-  // Payment Information
-  paymentMethod: { type: String, required: false, default: 'unknown' },
-  paymentMethodTitle: { type: String, required: false, default: 'Unknown Payment Method' },
-  transactionId: { type: String },
-  
-  // Order Items
-  lineItems: [{
-    id: { type: Number, required: false },
-    name: { type: String, required: false, default: 'Unknown Product' },
-    product_id: { type: Number, required: false },
-    variation_id: { type: Number, default: 0 },
-    quantity: { type: Number, required: false, default: 1 },
-    tax_class: { type: String, default: '' },
-    subtotal: { type: String, required: false, default: '0' },
-    subtotal_tax: { type: String, default: '0' },
-    total: { type: String, required: false, default: '0' },
-    total_tax: { type: String, default: '0' },
-    taxes: [{
-      id: { type: Number },
-      total: { type: String },
-      subtotal: { type: String }
-    }],
-    meta_data: [{
-      id: { type: Number },
-      key: { type: String },
-      value: { type: Schema.Types.Mixed }
-    }],
-    sku: { type: String },
-    price: { type: Number, required: false, default: 0 },
-    image: {
-      id: { type: Number },
-      src: { type: String }
-    },
-    parent_name: { type: String }
-  }],
-  
-  // Billing Address
-  billingAddress: {
-    first_name: { type: String, required: false, default: 'Unknown' },
-    last_name: { type: String, required: false, default: 'Customer' },
-    company: { type: String, default: '' },
-    address_1: { type: String, required: false, default: 'Unknown Address' },
-    address_2: { type: String, default: '' },
-    city: { type: String, required: false, default: 'Unknown City' },
-    state: { type: String, required: false, default: 'Unknown State' },
-    postcode: { type: String, required: false, default: '00000' },
-    country: { type: String, required: false, default: 'US' },
-    email: { type: String, required: false, default: 'unknown@example.com' },
-    phone: { type: String, default: '' }
+  // Order status
+  status: { 
+    type: String, 
+    enum: ['pending', 'waiting_payment', 'waiting_confirmation', 'processing', 'shipped', 'delivered', 'completed', 'cancelled'],
+    default: 'pending',
+    index: true
   },
   
-  // Shipping Address
+  // Shipping information
   shippingAddress: {
-    first_name: { type: String, required: false, default: 'Unknown' },
-    last_name: { type: String, required: false, default: 'Customer' },
-    company: { type: String, default: '' },
-    address_1: { type: String, required: false, default: 'Unknown Address' },
-    address_2: { type: String, default: '' },
-    city: { type: String, required: false, default: 'Unknown City' },
-    state: { type: String, required: false, default: 'Unknown State' },
-    postcode: { type: String, required: false, default: '00000' },
-    country: { type: String, required: false, default: 'US' }
+    name: { type: String, required: true },
+    phone: { type: String, required: true },
+    street: { type: String, required: true },
+    city: { type: String, required: true },
+    state: { type: String, required: true },
+    postalCode: { type: String, required: true },
+    country: { type: String, required: true },
+    notes: { type: String, default: '' }
   },
   
-  // Order Key
-  orderKey: { type: String, required: false, unique: true },
+  // Tracking
+  trackingNumber: { type: String, default: '' },
+  shippedAt: { type: Date },
+  deliveredAt: { type: Date },
   
-  // Important Dates
-  dateCreated: { type: Date, required: false },
-  dateModified: { type: Date, required: false },
-  dateCompleted: { type: Date },
-  datePaid: { type: Date },
+  // Payment confirmation
+  paymentConfirmation: {
+    image: { type: String, default: '' }, // Screenshot of transfer
+    note: { type: String, default: '' },
+    submittedAt: { type: Date }
+  },
   
-  // Additional Information
-  customerNote: { type: String, default: '' },
-  metaData: [{
-    key: { type: String },
-    value: { type: Schema.Types.Mixed }
-  }],
+  // Admin notes
+  adminNotes: { type: String, default: '' },
   
-  // Processing Status
-  isProcessed: { type: Boolean, default: false },
-  processedAt: { type: Date },
-  processingError: { type: String }
+  // Cancellation
+  cancelledAt: { type: Date },
+  cancellationReason: { type: String, default: '' },
+  cancelledBy: { type: Schema.Types.ObjectId, ref: 'User' },
   
-}, { timestamps: true });
+  // Points refunded when cancelled
+  pointsRefunded: { type: Boolean, default: false },
+  
+}, { timestamps: true, strictPopulate: false });
 
-// Compound indexes for better query performance
-OrderSchema.index({ wordpressOrderId: 1, status: 1 });
-OrderSchema.index({ customerEmail: 1, status: 1 });
+// Ensure order number exists before validation
+OrderSchema.pre('validate', function(next) {
+  if (!this.orderNumber) {
+    const timestamp = Date.now().toString().slice(-8);
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    this.orderNumber = `ORD${timestamp}${random}`;
+  }
+  next();
+});
+
+// Indexes for better performance
+OrderSchema.index({ user: 1, createdAt: -1 });
 OrderSchema.index({ status: 1, createdAt: -1 });
-OrderSchema.index({ dateCreated: -1, status: 1 });
-OrderSchema.index({ isProcessed: 1, status: 1 });
+OrderSchema.index({ paymentStatus: 1, status: 1 });
+OrderSchema.index({ orderNumber: 1 });
 
-// Pre-save middleware could be added here if needed
-
-// Transform output to match frontend expectations
 OrderSchema.set('toJSON', {
   transform: (doc, ret) => {
     ret.id = ret._id.toString();
     delete ret._id;
     delete ret.__v;
-    return ret;
   },
 });
 
-// Virtual for formatted total
-OrderSchema.virtual('formattedTotal').get(function() {
-  return `${this.currency} ${this.total}`;
-});
-
-// Virtual for customer full name
-OrderSchema.virtual('customerFullName').get(function() {
-  return this.billingAddress ? `${this.billingAddress.first_name} ${this.billingAddress.last_name}` : this.customerName;
-});
-
-// Static methods
-OrderSchema.statics.findByWordPressId = function(wordpressOrderId: number) {
-  return this.findOne({ wordpressOrderId });
-};
-
-OrderSchema.statics.findByStatus = function(status: string) {
-  return this.find({ status }).sort({ createdAt: -1 });
-};
-
-OrderSchema.statics.findByCustomerEmail = function(customerEmail: string) {
-  return this.find({ customerEmail }).sort({ createdAt: -1 });
-};
-
 const Order = models?.Order || model('Order', OrderSchema);
-
-export default Order; 
+export default Order;

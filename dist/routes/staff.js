@@ -9,12 +9,13 @@ const user_1 = __importDefault(require("../models/user"));
 const prediction_1 = __importDefault(require("../models/prediction"));
 const question_1 = __importDefault(require("../models/question"));
 const feedback_1 = __importDefault(require("../models/feedback"));
+const cache_1 = require("../utils/cache");
 const router = express_1.default.Router();
 // Apply auth and staff middleware to all routes
-router.use(auth_1.authMiddleware);
+router.use(auth_1.authenticate);
 router.use(auth_1.staffMiddleware);
 // Get staff dashboard stats
-router.get('/dashboard-stats', async (req, res) => {
+router.get('/dashboard-stats', auth_1.authenticate, async (req, res) => {
     try {
         const [totalUsers, verifiedUsers, activePredictions, activeQuestions, pendingFeedback, thisMonthUsers] = await Promise.all([
             user_1.default.countDocuments({ role: 'user' }),
@@ -55,7 +56,7 @@ router.get('/dashboard-stats', async (req, res) => {
     }
 });
 // Get users for staff management
-router.get('/users', async (req, res) => {
+router.get('/users', auth_1.authenticate, async (req, res) => {
     try {
         const { page = 1, limit = 20, search, verified } = req.query;
         const query = { role: 'user' };
@@ -95,7 +96,7 @@ router.get('/users', async (req, res) => {
     }
 });
 // Update user status (verify/unverify)
-router.patch('/users/:id/status', async (req, res) => {
+router.patch('/users/:id/status', auth_1.authenticate, async (req, res) => {
     try {
         const { id } = req.params;
         const { isEmailVerified } = req.body;
@@ -129,7 +130,7 @@ router.patch('/users/:id/status', async (req, res) => {
     }
 });
 // Get predictions for staff review
-router.get('/predictions', async (req, res) => {
+router.get('/predictions', auth_1.authenticate, async (req, res) => {
     try {
         const { status, page = 1, limit = 20 } = req.query;
         const query = {};
@@ -173,7 +174,7 @@ router.get('/predictions', async (req, res) => {
     }
 });
 // Update prediction status
-router.patch('/predictions/:id/status', async (req, res) => {
+router.patch('/predictions/:id/status', auth_1.authenticate, async (req, res) => {
     try {
         const { id } = req.params;
         const { status } = req.body;
@@ -190,6 +191,8 @@ router.patch('/predictions/:id/status', async (req, res) => {
                 message: 'Prediction not found'
             });
         }
+        // Clear cache so status change appears immediately for users
+        (0, cache_1.clearCache)();
         res.json({
             success: true,
             data: prediction,
@@ -205,7 +208,7 @@ router.patch('/predictions/:id/status', async (req, res) => {
     }
 });
 // Get questions for staff management
-router.get('/questions', async (req, res) => {
+router.get('/questions', auth_1.authenticate, async (req, res) => {
     try {
         const { status, page = 1, limit = 20 } = req.query;
         const query = {};
@@ -239,7 +242,7 @@ router.get('/questions', async (req, res) => {
     }
 });
 // Update question status
-router.patch('/questions/:id/status', async (req, res) => {
+router.patch('/questions/:id/status', auth_1.authenticate, async (req, res) => {
     try {
         const { id } = req.params;
         const { status } = req.body;
@@ -271,7 +274,7 @@ router.patch('/questions/:id/status', async (req, res) => {
     }
 });
 // Create question (Staff can create but not modify points)
-router.post('/questions', async (req, res) => {
+router.post('/questions', auth_1.authenticate, async (req, res) => {
     try {
         const { questionText, imageUrl, answer, isPriority } = req.body;
         const question = new question_1.default({
@@ -297,7 +300,7 @@ router.post('/questions', async (req, res) => {
     }
 });
 // Update question (Staff cannot modify points)
-router.put('/questions/:id', async (req, res) => {
+router.put('/questions/:id', auth_1.authenticate, async (req, res) => {
     try {
         const { id } = req.params;
         const { questionText, imageUrl, answer, isPriority } = req.body;
@@ -329,7 +332,7 @@ router.put('/questions/:id', async (req, res) => {
     }
 });
 // Update question priority
-router.patch('/questions/:id/priority', async (req, res) => {
+router.patch('/questions/:id/priority', auth_1.authenticate, async (req, res) => {
     try {
         const { id } = req.params;
         const { isPriority } = req.body;

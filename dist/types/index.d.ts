@@ -13,6 +13,10 @@ export type User = {
     consecutiveCheckIns: number;
     lastCheckInDate?: string;
     totalSuccessfulReferrals: number;
+    skipCount: number;
+    maxSkips: number;
+    lastSkipResetDate?: string;
+    answeredQuestionIds: string[];
     createdAt: string;
 };
 export type Prediction = {
@@ -159,6 +163,8 @@ export type RegisterData = {
 };
 export interface AuthRequest extends Request {
     user?: AuthUser;
+    prediction?: any;
+    canViewAnswer?: boolean;
 }
 export type OrderCustomer = {
     id: number;

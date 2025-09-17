@@ -18,6 +18,12 @@ const UserSchema = new mongoose_1.Schema({
     consecutiveCheckIns: { type: Number, default: 0, index: true },
     lastCheckInDate: { type: Date, index: true },
     totalSuccessfulReferrals: { type: Number, default: 0 },
+    // Skip feature
+    skipCount: { type: Number, default: 0 },
+    maxSkips: { type: Number, default: 3 },
+    lastSkipResetDate: { type: Date },
+    // Answered questions tracking
+    answeredQuestionIds: [{ type: mongoose_1.Schema.Types.ObjectId, ref: 'Question' }],
     // Personal Information for Profile
     phone: { type: String, default: '' },
     dateOfBirth: { type: Date },
@@ -33,6 +39,14 @@ const UserSchema = new mongoose_1.Schema({
     isAutoCreated: { type: Boolean, default: false }, // Track if created from order webhook
     lastLogin: { type: Date },
     totalOrderValue: { type: Number, default: 0 }, // Total value of all orders
+    // Shopping preferences
+    hasCompletedProfile: { type: Boolean, default: false }, // Has phone and address
+    preferredPaymentMethod: { type: String, enum: ['bank_transfer', 'cod', ''], default: '' },
+    // Suggestion packages
+    suggestionPackages: [{
+            type: mongoose_1.Schema.Types.ObjectId,
+            ref: 'UserSuggestion'
+        }],
 }, { timestamps: true });
 // Compound indexes for better query performance
 UserSchema.index({ email: 1, isEmailVerified: 1 });

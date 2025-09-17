@@ -5,29 +5,31 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const auth_1 = require("../middleware/auth");
+const predictionAuth_1 = require("../middleware/predictionAuth");
 const prediction_1 = __importDefault(require("../models/prediction"));
 const user_prediction_1 = __importDefault(require("../models/user-prediction"));
 const user_1 = __importDefault(require("../models/user"));
+const point_transaction_1 = __importDefault(require("../models/point-transaction"));
+const UserSuggestion_1 = __importDefault(require("../models/UserSuggestion"));
+const cache_1 = require("../utils/cache");
 const router = express_1.default.Router();
-// Simple in-memory cache for active predictions (5 minutes)
-let activePredictionsCache = null;
-let cacheTimestamp = 0;
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+// Cache is now managed by utils/cache.ts
 // Get all active predictions
 router.get('/', async (req, res) => {
     try {
         // Check cache first
-        const now = Date.now();
-        if (activePredictionsCache && (now - cacheTimestamp) < CACHE_DURATION) {
+        if ((0, cache_1.isCacheValid)()) {
+            const { cache } = (0, cache_1.getCache)();
             return res.json({
                 success: true,
-                data: activePredictionsCache,
+                data: cache,
                 cached: true
             });
         }
-        // Fetch from database with optimized query
-        const predictions = await prediction_1.default.find({ status: 'active' })
+        // Fetch from database with optimized query - include both active and finished predictions
+        const predictions = await prediction_1.default.find({ status: { $in: ['active', 'finished'] } })
             .populate('authorId', 'name')
+            .populate('winnerId', 'name avatarUrl')
             .sort({ createdAt: -1 })
             .lean() // Use lean() for better performance
             .exec();
@@ -37,8 +39,7 @@ router.get('/', async (req, res) => {
             id: prediction._id.toString() // Ensure ID is properly set
         }));
         // Update cache
-        activePredictionsCache = transformedPredictions;
-        cacheTimestamp = now;
+        (0, cache_1.setCache)(transformedPredictions);
         res.json({
             success: true,
             data: transformedPredictions,
@@ -54,23 +55,15 @@ router.get('/', async (req, res) => {
     }
 });
 // Get prediction details
-router.get('/:id', async (req, res) => {
+router.get('/:id', predictionAuth_1.checkPredictionViewAccess, async (req, res) => {
     try {
         const { page = 1, limit = 20 } = req.query;
         const pageNum = parseInt(page);
         const limitNum = parseInt(limit);
-        // Optimize query with lean() and select only needed fields
         const prediction = await prediction_1.default.findById(req.params.id)
-            .populate('authorId', 'name avatarUrl')
-            .populate('winnerId', 'name avatarUrl')
-            .lean()
-            .exec();
-        if (!prediction) {
-            return res.status(404).json({
-                success: false,
-                message: 'Prediction not found'
-            });
-        }
+            .populate('authorId', 'name')
+            .populate('winnerId', 'name avatarUrl');
+        const canViewAnswer = req.canViewAnswer;
         // Get paginated user predictions with optimized query
         const userPredictions = await user_prediction_1.default.find({ predictionId: req.params.id })
             .populate('userId', 'name avatarUrl')
@@ -88,12 +81,17 @@ router.get('/:id', async (req, res) => {
             id: up._id.toString(), // Ensure ID is properly set
             user: up.userId
         }));
+        const predictionObj = prediction.toObject();
         res.json({
             success: true,
             data: {
                 prediction: {
-                    ...prediction,
-                    id: prediction._id.toString() // Ensure ID is properly set
+                    ...predictionObj,
+                    id: predictionObj._id.toString(), // Ensure ID is properly set
+                    answer: canViewAnswer ? prediction.getDecryptedAnswer() : '***ENCRYPTED***',
+                    rewardPoints: prediction.rewardPoints,
+                    pointsCost: prediction.pointsCost,
+                    createdAt: predictionObj.createdAt
                 },
                 userPredictions: transformedUserPredictions,
                 totalPages
@@ -109,7 +107,7 @@ router.get('/:id', async (req, res) => {
     }
 });
 // Submit prediction
-router.post('/:id/submit', auth_1.authMiddleware, async (req, res) => {
+router.post('/:id/submit', auth_1.authenticate, async (req, res) => {
     try {
         const { guess } = req.body;
         const predictionId = req.params.id;
@@ -127,6 +125,18 @@ router.post('/:id/submit', auth_1.authMiddleware, async (req, res) => {
                 message: 'Prediction is not active'
             });
         }
+        // Check if user already has a correct prediction for this prediction
+        const existingCorrectPrediction = await user_prediction_1.default.findOne({
+            userId,
+            predictionId,
+            isCorrect: true
+        });
+        if (existingCorrectPrediction) {
+            return res.status(400).json({
+                success: false,
+                message: 'You have already predicted correctly for this prediction!'
+            });
+        }
         const user = await user_1.default.findById(userId);
         if (!user || user.points < prediction.pointsCost) {
             return res.status(400).json({
@@ -134,8 +144,9 @@ router.post('/:id/submit', auth_1.authMiddleware, async (req, res) => {
                 message: 'Insufficient points'
             });
         }
-        // Check if guess is correct
-        const isCorrect = guess.toLowerCase().trim() === prediction.answer.toLowerCase().trim();
+        // Check if guess is correct - decrypt answer first
+        const decryptedAnswer = prediction.getDecryptedAnswer();
+        const isCorrect = guess.toLowerCase().trim() === decryptedAnswer.toLowerCase().trim();
         // Deduct points
         user.points -= prediction.pointsCost;
         await user.save();
@@ -148,26 +159,44 @@ router.post('/:id/submit', auth_1.authMiddleware, async (req, res) => {
             pointsSpent: prediction.pointsCost
         });
         await userPrediction.save();
-        // If correct, award points and mark prediction as finished
+        // If correct, award bonus points and CLOSE the prediction immediately
         if (isCorrect) {
-            const bonusPoints = Math.round(prediction.pointsCost * 1.5);
+            const bonusPoints = prediction.rewardPoints || Math.round(prediction.pointsCost * 1.5);
             user.points += bonusPoints;
             await user.save();
+            // Mark prediction finished and set winner (but keep it visible)
             prediction.status = 'finished';
             prediction.winnerId = user._id;
             await prediction.save();
-            // Clear cache when prediction status changes
-            activePredictionsCache = null;
+            // Clear active cache so list updates instantly
+            (0, cache_1.clearCache)();
+            // Record the transaction
+            await point_transaction_1.default.create({
+                userId: userId,
+                adminId: prediction.authorId, // Use prediction author as admin for transaction
+                amount: bonusPoints,
+                reason: 'prediction-win',
+                notes: `Correct prediction: ${prediction.title}`
+            });
             return res.json({
                 success: true,
-                data: { isCorrect: true, bonusPoints },
-                message: 'Correct prediction! You won bonus points!'
+                data: {
+                    isCorrect: true,
+                    bonusPoints,
+                    pointsCost: prediction.pointsCost,
+                    totalPointsEarned: bonusPoints - prediction.pointsCost
+                },
+                message: `Chính xác! Bạn đã dự đoán đúng, dự đoán đã kết thúc và bạn nhận được ${bonusPoints} điểm thưởng!`
             });
         }
         res.json({
             success: true,
-            data: { isCorrect: false },
-            message: 'Prediction submitted successfully'
+            data: {
+                isCorrect: false,
+                pointsCost: prediction.pointsCost,
+                message: `Dự đoán không đúng. Bạn đã trừ ${prediction.pointsCost} điểm. Hãy thử lại!`
+            },
+            message: 'Dự đoán đã được gửi thành công!'
         });
     }
     catch (error) {
@@ -179,4 +208,70 @@ router.post('/:id/submit', auth_1.authMiddleware, async (req, res) => {
     }
 });
 exports.default = router;
+// Use a hint from user's suggestion packages for a prediction
+router.post('/:id/use-hint', auth_1.authenticate, async (req, res) => {
+    try {
+        const predictionId = req.params.id;
+        const userId = req.user.id;
+        const prediction = await prediction_1.default.findById(predictionId);
+        if (!prediction) {
+            return res.status(404).json({ success: false, message: 'Prediction not found' });
+        }
+        // Pick an active user suggestion package with remaining > 0
+        const now = new Date();
+        const userSuggestion = await UserSuggestion_1.default.findOne({
+            user: userId,
+            isActive: true,
+            validFrom: { $lte: now },
+            validUntil: { $gte: now },
+            remainingSuggestions: { $gt: 0 },
+        }).sort({ createdAt: 1 });
+        if (!userSuggestion) {
+            return res.status(400).json({ success: false, message: 'Bạn không còn lượt gợi ý. Vui lòng mua gói gợi ý.' });
+        }
+        // Consume one suggestion
+        userSuggestion.usedSuggestions += 1;
+        userSuggestion.remainingSuggestions = Math.max(0, userSuggestion.totalSuggestions - userSuggestion.usedSuggestions);
+        await userSuggestion.save();
+        // Build a safe hint from prediction data
+        const rawHint = prediction['data-ai-hint'] || '';
+        const baseHint = rawHint && typeof rawHint === 'string' ? rawHint : '';
+        // Generate varied, question-related hints from title/description
+        const textPool = [prediction.title || '', prediction.description || '']
+            .join(' ')
+            .toLowerCase()
+            .replace(/[^a-z0-9àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ\s]/g, ' ');
+        const words = Array.from(new Set(textPool.split(/\s+/).filter(w => w.length >= 4))).slice(0, 12);
+        const keywords = words.slice(0, 6);
+        const pick = (idx, arr) => (arr.length ? arr[idx % arr.length] : '');
+        const k1 = pick(0, keywords);
+        const k2 = pick(1, keywords);
+        const k3 = pick(2, keywords);
+        const candidates = [
+            baseHint || '',
+            k1 ? `Hãy tập trung vào từ khóa: "${k1}".` : '',
+            k2 ? `Trong mô tả có chi tiết liên quan đến "${k2}".` : '',
+            k3 ? `Xem lại phần mở đầu, có gợi ý về "${k3}".` : '',
+            'Đối chiếu tiêu đề với mô tả để tìm mấu chốt.',
+            'Loại trừ những đáp án mâu thuẫn với mô tả.',
+            'Tìm số liệu, thời gian hoặc tên riêng trong mô tả.',
+            prediction.title ? `Từ tiêu đề: "${prediction.title}", rút ra ý chính rồi so sánh với đáp án của bạn.` : '',
+        ].filter(Boolean);
+        // Rotate hint by current usedSuggestions to avoid repeating the same text many times
+        const indexSeed = userSuggestion.usedSuggestions - 1; // just consumed one above
+        const hint = candidates[candidates.length ? (indexSeed % candidates.length + candidates.length) % candidates.length : 0] || 'Gợi ý: Xem kỹ các chi tiết quan trọng trong mô tả.';
+        return res.json({
+            success: true,
+            data: {
+                hint,
+                remaining: userSuggestion.remainingSuggestions,
+                total: userSuggestion.totalSuggestions,
+            }
+        });
+    }
+    catch (error) {
+        console.error('Use hint error:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+});
 //# sourceMappingURL=prediction.js.map

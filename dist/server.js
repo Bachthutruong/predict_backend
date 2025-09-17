@@ -12,6 +12,7 @@ const helmet_1 = __importDefault(require("helmet"));
 const compression_1 = __importDefault(require("compression"));
 // Rate limiting completely removed from dependencies
 const database_1 = __importDefault(require("./config/database"));
+const system_settings_1 = require("./models/system-settings");
 const seed_1 = require("./utils/seed");
 // Import routes
 const auth_1 = __importDefault(require("./routes/auth"));
@@ -28,6 +29,16 @@ const survey_1 = __importDefault(require("./routes/survey")); // Import survey r
 const voting_1 = __importDefault(require("./routes/voting")); // Import voting routes
 const contest_1 = __importDefault(require("./routes/contest")); // Import contest routes
 const adminContest_1 = __importDefault(require("./routes/adminContest")); // Import admin contest routes
+const adminProduct_1 = __importDefault(require("./routes/adminProduct")); // Import admin product routes
+const adminOrder_1 = __importDefault(require("./routes/adminOrder")); // Import admin order routes
+const adminSystemOrder_1 = __importDefault(require("./routes/adminSystemOrder")); // New system order routes
+const adminCoupon_1 = __importDefault(require("./routes/adminCoupon")); // Import admin coupon routes
+const settings_1 = __importDefault(require("./routes/settings"));
+const adminSuggestionPackage_1 = __importDefault(require("./routes/adminSuggestionPackage")); // Import admin suggestion package routes
+const adminCategory_1 = __importDefault(require("./routes/adminCategory")); // Import admin category routes
+const shop_1 = __importDefault(require("./routes/shop")); // Import shop routes
+const cart_1 = __importDefault(require("./routes/cart")); // Import cart routes
+const order_1 = __importDefault(require("./routes/order")); // Import order routes
 console.log('🔍 Webhook routes imported:', typeof webhook_1.default, webhook_1.default);
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5001;
@@ -104,6 +115,10 @@ app.use('/api/webhook', (req, res, next) => {
     return (0, seed_1.createIndexes)();
 })
     .then(() => {
+    // Initialize default settings after DB connected
+    return (0, system_settings_1.initializeDefaultSystemSettings)();
+})
+    .then(() => {
     console.log('✅ Server setup completed');
 })
     .catch((error) => {
@@ -166,8 +181,17 @@ app.use('/api/auth', auth_1.default);
 app.use('/api/users', user_1.default);
 app.use('/api/predictions', prediction_1.default);
 app.use('/api/contests', contest_1.default); // Use contest routes
-app.use('/api/admin', admin_1.default);
+// Specific admin sub-routers MUST be mounted before generic '/api/admin' to avoid route conflicts
 app.use('/api/admin/contests', adminContest_1.default); // Use admin contest routes
+app.use('/api/admin/products', adminProduct_1.default); // Use admin product routes
+// Preserve legacy WooCommerce admin orders under /api/admin/orders (unchanged)
+app.use('/api/admin/orders', adminOrder_1.default);
+// New: System orders under a separate namespace to avoid confusion with Woo
+app.use('/api/admin/system-orders', adminSystemOrder_1.default);
+app.use('/api/admin/coupons', adminCoupon_1.default); // Use admin coupon routes
+app.use('/api/admin/suggestion-packages', adminSuggestionPackage_1.default); // Use admin suggestion package routes
+app.use('/api/admin/categories', adminCategory_1.default); // Use admin category routes
+app.use('/api/admin', admin_1.default);
 app.use('/api/staff', staff_1.default);
 app.use('/api/check-in', check_in_1.default);
 app.use('/api/feedback', feedback_1.default);
@@ -175,6 +199,10 @@ app.use('/api/dashboard', dashboard_1.default);
 app.use('/api/cloudinary', cloudinary_1.default);
 app.use('/api/surveys', survey_1.default); // Use survey routes
 app.use('/api/voting', voting_1.default); // Use voting routes
+app.use('/api/shop', shop_1.default); // Use shop routes
+app.use('/api/cart', cart_1.default); // Use cart routes
+app.use('/api/orders', order_1.default); // Use order routes
+app.use('/api/settings', settings_1.default); // Settings routes (public + admin)
 // 404 handler
 app.use('*', (req, res) => {
     res.status(404).json({

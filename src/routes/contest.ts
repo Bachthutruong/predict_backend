@@ -1,5 +1,5 @@
 import express from 'express';
-import { authMiddleware } from '../middleware/auth';
+import { authenticate } from '../middleware/auth';
 import {
   getActiveContests,
   getContestDetails,
@@ -14,13 +14,13 @@ const router = express.Router();
 router.get('/', getActiveContests);
 
 // Get user's contest history
-router.get('/history', authMiddleware, getContestHistory);
+router.get('/history', authenticate, getContestHistory);
 
 // Get contest details (public view)
 router.get('/:id', getContestDetails);
 
 // Protected routes - authentication required
 // Submit answer to contest
-router.post('/:id/submit', authMiddleware, submitContestAnswer);
+router.post('/:id/submit', authenticate, submitContestAnswer);
 
 export default router; 

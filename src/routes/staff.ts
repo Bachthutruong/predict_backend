@@ -1,18 +1,19 @@
 import express from 'express';
-import { authMiddleware, staffMiddleware, AuthRequest } from '../middleware/auth';
+import { authenticate, staffMiddleware, AuthRequest } from '../middleware/auth';
 import User from '../models/user';
 import Prediction from '../models/prediction';
 import Question from '../models/question';
 import Feedback from '../models/feedback';
+import { clearCache } from '../utils/cache';
 
 const router = express.Router();
 
 // Apply auth and staff middleware to all routes
-router.use(authMiddleware);
+router.use(authenticate);
 router.use(staffMiddleware);
 
 // Get staff dashboard stats
-router.get('/dashboard-stats', async (req, res) => {
+router.get('/dashboard-stats', authenticate, async (req, res) => {
   try {
     const [
       totalUsers,
@@ -62,7 +63,7 @@ router.get('/dashboard-stats', async (req, res) => {
 });
 
 // Get users for staff management
-router.get('/users', async (req, res) => {
+router.get('/users', authenticate, async (req, res) => {
   try {
     const { page = 1, limit = 20, search, verified } = req.query;
     
@@ -108,7 +109,7 @@ router.get('/users', async (req, res) => {
 });
 
 // Update user status (verify/unverify)
-router.patch('/users/:id/status', async (req: AuthRequest, res) => {
+router.patch('/users/:id/status', authenticate, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const { isEmailVerified } = req.body;
@@ -146,7 +147,7 @@ router.patch('/users/:id/status', async (req: AuthRequest, res) => {
 });
 
 // Get predictions for staff review
-router.get('/predictions', async (req, res) => {
+router.get('/predictions', authenticate, async (req, res) => {
   try {
     const { status, page = 1, limit = 20 } = req.query;
     
@@ -195,7 +196,7 @@ router.get('/predictions', async (req, res) => {
 });
 
 // Update prediction status
-router.patch('/predictions/:id/status', async (req: AuthRequest, res) => {
+router.patch('/predictions/:id/status', authenticate, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -220,6 +221,9 @@ router.patch('/predictions/:id/status', async (req: AuthRequest, res) => {
       });
     }
 
+    // Clear cache so status change appears immediately for users
+    clearCache();
+
     res.json({
       success: true,
       data: prediction,
@@ -235,7 +239,7 @@ router.patch('/predictions/:id/status', async (req: AuthRequest, res) => {
 });
 
 // Get questions for staff management
-router.get('/questions', async (req, res) => {
+router.get('/questions', authenticate, async (req, res) => {
   try {
     const { status, page = 1, limit = 20 } = req.query;
     
@@ -273,7 +277,7 @@ router.get('/questions', async (req, res) => {
 });
 
 // Update question status
-router.patch('/questions/:id/status', async (req: AuthRequest, res) => {
+router.patch('/questions/:id/status', authenticate, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -313,7 +317,7 @@ router.patch('/questions/:id/status', async (req: AuthRequest, res) => {
 });
 
 // Create question (Staff can create but not modify points)
-router.post('/questions', async (req: AuthRequest, res) => {
+router.post('/questions', authenticate, async (req: AuthRequest, res) => {
   try {
     const { questionText, imageUrl, answer, isPriority } = req.body;
 
@@ -342,7 +346,7 @@ router.post('/questions', async (req: AuthRequest, res) => {
 });
 
 // Update question (Staff cannot modify points)
-router.put('/questions/:id', async (req: AuthRequest, res) => {
+router.put('/questions/:id', authenticate, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const { questionText, imageUrl, answer, isPriority } = req.body;
@@ -377,7 +381,7 @@ router.put('/questions/:id', async (req: AuthRequest, res) => {
 });
 
 // Update question priority
-router.patch('/questions/:id/priority', async (req: AuthRequest, res) => {
+router.patch('/questions/:id/priority', authenticate, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const { isPriority } = req.body;

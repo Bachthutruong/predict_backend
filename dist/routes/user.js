@@ -11,7 +11,7 @@ const point_transaction_1 = __importDefault(require("../models/point-transaction
 const referral_1 = __importDefault(require("../models/referral"));
 const router = express_1.default.Router();
 // Get current user profile
-router.get('/profile', auth_1.authMiddleware, async (req, res) => {
+router.get('/profile', auth_1.authenticate, async (req, res) => {
     try {
         const user = await user_1.default.findById(req.user.id);
         if (!user) {
@@ -39,7 +39,7 @@ router.get('/profile', auth_1.authMiddleware, async (req, res) => {
     }
 });
 // Update user profile
-router.put('/profile', auth_1.authMiddleware, async (req, res) => {
+router.put('/profile', auth_1.authenticate, async (req, res) => {
     try {
         const { name, avatarUrl, phone, dateOfBirth, gender, address } = req.body;
         const updateData = {};
@@ -95,7 +95,7 @@ router.put('/profile', auth_1.authMiddleware, async (req, res) => {
     }
 });
 // Change user password
-router.put('/profile/password', auth_1.authMiddleware, async (req, res) => {
+router.put('/profile/password', auth_1.authenticate, async (req, res) => {
     try {
         const { currentPassword, newPassword } = req.body;
         // Validate input
@@ -158,7 +158,7 @@ router.put('/profile/password', auth_1.authMiddleware, async (req, res) => {
     }
 });
 // Get user's point transactions
-router.get('/transactions', auth_1.authMiddleware, async (req, res) => {
+router.get('/transactions', auth_1.authenticate, async (req, res) => {
     try {
         const transactions = await point_transaction_1.default.find({ userId: req.user.id })
             .populate('adminId', 'name')
@@ -185,7 +185,7 @@ router.get('/transactions', auth_1.authMiddleware, async (req, res) => {
     }
 });
 // Get user referrals
-router.get('/referrals', auth_1.authMiddleware, async (req, res) => {
+router.get('/referrals', auth_1.authenticate, async (req, res) => {
     try {
         const userId = req.user?.id;
         if (!userId) {
@@ -234,7 +234,7 @@ router.get('/referrals', auth_1.authMiddleware, async (req, res) => {
     }
 });
 // Set referral code (only if not set)
-router.post('/set-referral-code', auth_1.authMiddleware, async (req, res) => {
+router.post('/set-referral-code', auth_1.authenticate, async (req, res) => {
     try {
         const { referralCode } = req.body;
         if (!referralCode || typeof referralCode !== 'string' || referralCode.trim().length < 4) {
