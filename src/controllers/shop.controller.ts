@@ -79,10 +79,35 @@ export const getShopProductById = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
+    // Need 'Review' model imported from somewhere if not already
+    // Assuming assuming Review is exported from models/Review
+    const Review = require('../models/Review').default;
+
+    // Calculate rating stats
+    const stats = await Review.aggregate([
+      { $match: { product: product._id } },
+      {
+        $group: {
+          _id: '$product',
+          averageRating: { $avg: '$rating' },
+          totalReviews: { $count: {} }
+        }
+      }
+    ]);
+
+    const reviewStats = stats.length > 0 ? stats[0] : { averageRating: 0, totalReviews: 0 };
+
     // Increment view count
     await Product.findByIdAndUpdate(id, { $inc: { viewCount: 1 } });
 
-    res.json({ success: true, data: product });
+    res.json({
+      success: true,
+      data: {
+        ...product.toObject(),
+        averageRating: reviewStats.averageRating,
+        totalReviews: reviewStats.totalReviews
+      }
+    });
   } catch (error) {
     console.error('Error getting shop product:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });

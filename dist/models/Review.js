@@ -11,6 +11,7 @@ const ReviewSchema = new mongoose_1.Schema({
     // Admin reply
     reply: { type: String },
     repliedAt: { type: Date },
+    adminReaction: { type: String }, // 'like', 'love', etc.
 }, { timestamps: true });
 // Prevent duplicate reviews from same user on same product (optional, but good practice)
 // ReviewSchema.index({ product: 1, user: 1 }, { unique: true });
