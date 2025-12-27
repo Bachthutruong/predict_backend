@@ -36,8 +36,8 @@ export const getCart = async (req: AuthRequest, res: Response) => {
 
     total = subtotal - discount;
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       data: {
         ...cart.toObject(),
         subtotal,
@@ -59,17 +59,17 @@ export const addToCart = async (req: AuthRequest, res: Response) => {
     // Check if product exists and is active
     const product = await Product.findOne({ _id: productId, isActive: true });
     if (!product) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Product not found or not available' 
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found or not available'
       });
     }
 
     // Check stock
     if (product.stock < quantity) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Insufficient stock' 
+      return res.status(400).json({
+        success: false,
+        message: 'Insufficient stock'
       });
     }
 
@@ -79,12 +79,16 @@ export const addToCart = async (req: AuthRequest, res: Response) => {
       cart = new Cart({ user: req.user?.id, items: [] });
     }
 
+    // Normalize variant - treat empty object, null, and undefined as the same
+    const normalizedVariant = variant && Object.keys(variant).length > 0 ? variant : null;
+
     // Check if item already exists in cart
-    const existingItemIndex = cart.items.findIndex(
-      (item: any) => 
-        item.product.toString() === productId &&
-        JSON.stringify(item.variant) === JSON.stringify(variant || {})
-    );
+    const existingItemIndex = cart.items.findIndex((item: any) => {
+      const itemVariant = item.variant && Object.keys(item.variant).length > 0 ? item.variant : null;
+      const isSameProduct = item.product.toString() === productId;
+      const isSameVariant = JSON.stringify(itemVariant) === JSON.stringify(normalizedVariant);
+      return isSameProduct && isSameVariant;
+    });
 
     if (existingItemIndex > -1) {
       // Update quantity
@@ -97,15 +101,15 @@ export const addToCart = async (req: AuthRequest, res: Response) => {
         product: productId,
         quantity,
         price: Number(product.price) || 0,
-        variant: variant || {},
+        variant: normalizedVariant,
         addedAt: new Date()
       });
     }
 
     await cart.save();
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Item added to cart successfully',
       data: cart
     });
@@ -118,45 +122,46 @@ export const addToCart = async (req: AuthRequest, res: Response) => {
 // Update cart item quantity
 export const updateCartItem = async (req: AuthRequest, res: Response) => {
   try {
-    const { itemId, quantity } = req.body;
+    const { itemId } = req.params;
+    const { quantity } = req.body;
 
     if (quantity < 1) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Quantity must be at least 1' 
+      return res.status(400).json({
+        success: false,
+        message: 'Quantity must be at least 1'
       });
     }
 
     const cart = await Cart.findOne({ user: req.user?.id });
     if (!cart) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Cart not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Cart not found'
       });
     }
 
     const item = cart.items.id(itemId);
     if (!item) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Item not found in cart' 
+      return res.status(404).json({
+        success: false,
+        message: 'Item not found in cart'
       });
     }
 
     // Check stock
     const product = await Product.findById(item.product);
     if (product && product.stock < quantity) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Insufficient stock' 
+      return res.status(400).json({
+        success: false,
+        message: 'Insufficient stock'
       });
     }
 
     item.quantity = quantity;
     await cart.save();
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Cart item updated successfully',
       data: cart
     });
@@ -173,17 +178,17 @@ export const removeFromCart = async (req: AuthRequest, res: Response) => {
 
     const cart = await Cart.findOne({ user: req.user?.id });
     if (!cart) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Cart not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Cart not found'
       });
     }
 
     cart.items.pull(itemId);
     await cart.save();
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Item removed from cart successfully',
       data: cart
     });
@@ -198,9 +203,9 @@ export const clearCart = async (req: AuthRequest, res: Response) => {
   try {
     const cart = await Cart.findOne({ user: req.user?.id });
     if (!cart) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Cart not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Cart not found'
       });
     }
 
@@ -209,8 +214,8 @@ export const clearCart = async (req: AuthRequest, res: Response) => {
     cart.couponCode = '';
     await cart.save();
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Cart cleared successfully',
       data: cart
     });
@@ -227,39 +232,39 @@ export const applyCoupon = async (req: AuthRequest, res: Response) => {
 
     const cart = await Cart.findOne({ user: req.user?.id })
       .populate('items.product', 'name price category');
-    
+
     if (!cart) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Cart not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Cart not found'
       });
     }
 
     if (cart.items.length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Cart is empty' 
+      return res.status(400).json({
+        success: false,
+        message: 'Cart is empty'
       });
     }
 
     // Find coupon
     const coupon = await Coupon.findOne({ code: couponCode });
     if (!coupon) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Coupon not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Coupon not found'
       });
     }
 
     // Calculate order amount
-    const orderAmount = cart.items.reduce((sum: number, item: any) => 
+    const orderAmount = cart.items.reduce((sum: number, item: any) =>
       sum + (item.quantity * item.price), 0
     );
 
     // Validate coupon
     const canBeUsed = coupon.canBeUsedBy(
-      req.user?.id, 
-      orderAmount, 
+      req.user?.id,
+      orderAmount,
       cart.items.map((item: any) => ({
         product: item.product._id,
         quantity: item.quantity
@@ -267,9 +272,9 @@ export const applyCoupon = async (req: AuthRequest, res: Response) => {
     );
 
     if (!canBeUsed) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Coupon cannot be used for this order' 
+      return res.status(400).json({
+        success: false,
+        message: 'Coupon cannot be used for this order'
       });
     }
 
@@ -277,8 +282,8 @@ export const applyCoupon = async (req: AuthRequest, res: Response) => {
     cart.couponCode = couponCode;
     await cart.save();
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Coupon applied successfully',
       data: cart
     });
@@ -293,9 +298,9 @@ export const removeCoupon = async (req: AuthRequest, res: Response) => {
   try {
     const cart = await Cart.findOne({ user: req.user?.id });
     if (!cart) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Cart not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Cart not found'
       });
     }
 
@@ -303,8 +308,8 @@ export const removeCoupon = async (req: AuthRequest, res: Response) => {
     cart.couponCode = '';
     await cart.save();
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Coupon removed successfully',
       data: cart
     });

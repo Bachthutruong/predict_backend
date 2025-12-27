@@ -4,6 +4,8 @@ import Product from '../models/Product';
 import Category from '../models/Category';
 import Coupon from '../models/Coupon';
 import SuggestionPackage from '../models/SuggestionPackage';
+import Branch from '../models/Branch';
+import PaymentConfig from '../models/PaymentConfig';
 
 // Get all products for shop (public)
 export const getShopProducts = async (req: AuthRequest, res: Response) => {
@@ -20,7 +22,7 @@ export const getShopProducts = async (req: AuthRequest, res: Response) => {
     } = req.query;
 
     const query: any = { isActive: true };
-    
+
     if (search) {
       const searchStr = String(search);
       query.$or = [
@@ -29,11 +31,11 @@ export const getShopProducts = async (req: AuthRequest, res: Response) => {
         { tags: { $in: [new RegExp(searchStr, 'i')] } }
       ];
     }
-    
+
     if (category) {
       query.category = category;
     }
-    
+
     if (minPrice || maxPrice) {
       query.price = {};
       if (minPrice) query.price.$gte = Number(minPrice);
@@ -72,7 +74,7 @@ export const getShopProductById = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const product = await Product.findOne({ _id: id, isActive: true })
       .select('-createdBy -metaTitle -metaDescription');
-    
+
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
@@ -108,14 +110,14 @@ export const getProductCategories = async (req: AuthRequest, res: Response) => {
 export const getFeaturedProducts = async (req: AuthRequest, res: Response) => {
   try {
     const { limit = 8 } = req.query;
-    
-    const products = await Product.find({ 
-      isActive: true, 
-      isFeatured: true 
+
+    const products = await Product.find({
+      isActive: true,
+      isFeatured: true
     })
-    .select('-createdBy -metaTitle -metaDescription')
-    .sort({ createdAt: -1 })
-    .limit(Number(limit));
+      .select('-createdBy -metaTitle -metaDescription')
+      .sort({ createdAt: -1 })
+      .limit(Number(limit));
 
     res.json({ success: true, data: products });
   } catch (error) {
@@ -145,17 +147,17 @@ export const validateCoupon = async (req: AuthRequest, res: Response) => {
 
     const coupon = await Coupon.findOne({ code });
     if (!coupon) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Coupon not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Coupon not found'
       });
     }
 
     const isValid = coupon.isValid();
     if (!isValid) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Coupon is not valid or has expired' 
+      return res.status(400).json({
+        success: false,
+        message: 'Coupon is not valid or has expired'
       });
     }
 
@@ -172,8 +174,8 @@ export const validateCoupon = async (req: AuthRequest, res: Response) => {
       discountAmount = 0; // Will be handled separately
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       data: {
         coupon: {
           id: coupon._id,
@@ -198,9 +200,9 @@ export const searchProducts = async (req: AuthRequest, res: Response) => {
     const { q, limit = 10 } = req.query;
 
     if (!q) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Search query is required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Search query is required'
       });
     }
 
@@ -212,12 +214,35 @@ export const searchProducts = async (req: AuthRequest, res: Response) => {
         { tags: { $in: [new RegExp(q as string, 'i')] } }
       ]
     })
-    .select('name images price originalPrice category')
-    .limit(Number(limit));
+      .select('name images price originalPrice category')
+      .limit(Number(limit));
 
     res.json({ success: true, data: products });
   } catch (error) {
     console.error('Error searching products:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+
+// Get branches
+export const getBranches = async (req: AuthRequest, res: Response) => {
+  try {
+    const branches = await Branch.find({ isActive: true });
+    res.json({ success: true, data: branches });
+  } catch (error) {
+    console.error('Error getting branches:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+// Get payment config
+export const getPaymentConfig = async (req: AuthRequest, res: Response) => {
+  try {
+    const config = await PaymentConfig.findOne({ isActive: true });
+    res.json({ success: true, data: config });
+  } catch (error) {
+    console.error('Error getting payment config:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };

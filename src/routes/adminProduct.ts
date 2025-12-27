@@ -9,7 +9,8 @@ import {
   deleteProduct,
   toggleProductStatus,
   getProductCategories,
-  updateProductStock
+  updateProductStock,
+  getInventoryHistory
 } from '../controllers/adminProduct.controller';
 
 const router = express.Router();
@@ -27,5 +28,6 @@ router.put('/:id', updateProduct);
 router.delete('/:id', deleteProduct);
 router.patch('/:id/toggle-status', toggleProductStatus);
 router.patch('/:id/stock', updateProductStock);
+router.get('/:id/inventory-history', getInventoryHistory);
 
 export default router;

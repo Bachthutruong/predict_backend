@@ -33,9 +33,13 @@ import adminCouponRoutes from './routes/adminCoupon'; // Import admin coupon rou
 import settingsRoutes from './routes/settings';
 import adminSuggestionPackageRoutes from './routes/adminSuggestionPackage'; // Import admin suggestion package routes
 import adminCategoryRoutes from './routes/adminCategory'; // Import admin category routes
+import adminBranchRoutes from './routes/adminBranch'; // Import admin branch routes
+import adminPaymentConfigRoutes from './routes/adminPaymentConfig'; // Import admin payment config routes
 import shopRoutes from './routes/shop'; // Import shop routes
 import cartRoutes from './routes/cart'; // Import cart routes
 import orderRoutes from './routes/order'; // Import order routes
+import reviewRoutes from './routes/review';
+import chatRoutes from './routes/chat';
 console.log('🔍 Webhook routes imported:', typeof webhookRoutes, webhookRoutes);
 
 const app = express();
@@ -66,32 +70,32 @@ if (process.env.FRONTEND_URL) {
 app.use(cors({
   origin: function (origin, callback) {
     console.log(`🌐 CORS check for origin: ${origin || 'none'}`);
-    
+
     // Always allow requests with no origin (webhooks, curl, etc)
     if (!origin) {
       console.log(`✅ Allowing request with no origin`);
       return callback(null, true);
     }
-    
+
     // Allow all webhook requests (WordPress/WooCommerce)
     if (origin && (origin.includes('wp-admin') || origin.includes('wordpress'))) {
       console.log(`✅ Allowing WordPress origin: ${origin}`);
       return callback(null, true);
     }
-    
+
     // Remove trailing slash from origin for comparison
     const cleanOrigin = origin.replace(/\/$/, '');
-    
+
     // Check if the origin is in the allowed list
-    const isAllowed = allowedOrigins.some(allowedOrigin => 
+    const isAllowed = allowedOrigins.some(allowedOrigin =>
       allowedOrigin.replace(/\/$/, '') === cleanOrigin
     );
-    
+
     if (isAllowed) {
       console.log(`✅ Allowing known origin: ${origin}`);
       return callback(null, true);
     }
-    
+
     // For debugging: allow all origins temporarily
     console.log(`⚠️ Unknown origin - allowing anyway for debug: ${origin}`);
     return callback(null, true); // TEMPORARY: Allow all origins
@@ -116,12 +120,12 @@ app.use('/api/webhook', (req, res, next) => {
     bodyKeys: Object.keys(req.body || {}),
     rawBody: req.body
   });
-  
+
   // If it's form data, try to parse it
   if (req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
     console.log('📝 Form data detected, body:', req.body);
   }
-  
+
   next();
 });
 
@@ -156,8 +160,8 @@ app.use('*', (req, res, next) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ 
-    success: true, 
+  res.json({
+    success: true,
     message: 'PredictWin API is running!',
     timestamp: new Date().toISOString()
   });
@@ -189,7 +193,7 @@ app.all('/api/simple-test', (req, res) => {
 
 // ⚠️ CRITICAL: Webhook routes FIRST with CORS but NO rate limiting
 console.log('🔧 Setting up WEBHOOK routes with CORS but NO rate limiting...');
-app.use('/api/webhook', 
+app.use('/api/webhook',
   cors({
     origin: true, // Allow all origins for webhooks
     credentials: false, // No credentials needed for webhooks
@@ -197,7 +201,7 @@ app.use('/api/webhook',
     allowedHeaders: '*', // Allow all headers for webhooks
     preflightContinue: false,
     optionsSuccessStatus: 200
-  }), 
+  }),
   webhookRoutes
 );
 
@@ -220,6 +224,8 @@ app.use('/api/admin/system-orders', adminSystemOrderRoutes);
 app.use('/api/admin/coupons', adminCouponRoutes); // Use admin coupon routes
 app.use('/api/admin/suggestion-packages', adminSuggestionPackageRoutes); // Use admin suggestion package routes
 app.use('/api/admin/categories', adminCategoryRoutes); // Use admin category routes
+app.use('/api/admin/branches', adminBranchRoutes); // Use admin branch routes
+app.use('/api/admin/payment-config', adminPaymentConfigRoutes); // Use admin payment config routes
 app.use('/api/admin', adminRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/check-in', checkInRoutes);
@@ -231,13 +237,15 @@ app.use('/api/voting', votingRoutes); // Use voting routes
 app.use('/api/shop', shopRoutes); // Use shop routes
 app.use('/api/cart', cartRoutes); // Use cart routes
 app.use('/api/orders', orderRoutes); // Use order routes
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/chat', chatRoutes);
 app.use('/api/settings', settingsRoutes); // Settings routes (public + admin)
 
 // 404 handler
 app.use('*', (req, res) => {
-  res.status(404).json({ 
-    success: false, 
-    message: 'API endpoint not found' 
+  res.status(404).json({
+    success: false,
+    message: 'API endpoint not found'
   });
 });
 

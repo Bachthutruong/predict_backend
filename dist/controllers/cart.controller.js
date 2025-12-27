@@ -74,9 +74,15 @@ const addToCart = async (req, res) => {
         if (!cart) {
             cart = new Cart_1.default({ user: req.user?.id, items: [] });
         }
+        // Normalize variant - treat empty object, null, and undefined as the same
+        const normalizedVariant = variant && Object.keys(variant).length > 0 ? variant : null;
         // Check if item already exists in cart
-        const existingItemIndex = cart.items.findIndex((item) => item.product.toString() === productId &&
-            JSON.stringify(item.variant) === JSON.stringify(variant || {}));
+        const existingItemIndex = cart.items.findIndex((item) => {
+            const itemVariant = item.variant && Object.keys(item.variant).length > 0 ? item.variant : null;
+            const isSameProduct = item.product.toString() === productId;
+            const isSameVariant = JSON.stringify(itemVariant) === JSON.stringify(normalizedVariant);
+            return isSameProduct && isSameVariant;
+        });
         if (existingItemIndex > -1) {
             // Update quantity
             cart.items[existingItemIndex].quantity += quantity;
@@ -89,7 +95,7 @@ const addToCart = async (req, res) => {
                 product: productId,
                 quantity,
                 price: Number(product.price) || 0,
-                variant: variant || {},
+                variant: normalizedVariant,
                 addedAt: new Date()
             });
         }
@@ -109,7 +115,8 @@ exports.addToCart = addToCart;
 // Update cart item quantity
 const updateCartItem = async (req, res) => {
     try {
-        const { itemId, quantity } = req.body;
+        const { itemId } = req.params;
+        const { quantity } = req.body;
         if (quantity < 1) {
             return res.status(400).json({
                 success: false,

@@ -23,7 +23,7 @@ export const getUserOrders = async (req: AuthRequest, res: Response) => {
     } = req.query;
 
     const query: any = { user: req.user?.id };
-    
+
     if (status) {
       query.status = status;
     }
@@ -62,13 +62,13 @@ export const getUserOrders = async (req: AuthRequest, res: Response) => {
 export const getOrderById = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const order = await SystemOrder.findOne({ 
-      _id: id, 
-      user: req.user?.id 
+    const order = await SystemOrder.findOne({
+      _id: id,
+      user: req.user?.id
     })
-    .populate('items.product', 'name images price pointsReward')
-    .populate('coupon', 'code name discountType discountValue');
-    
+      .populate('items.product', 'name images price pointsReward')
+      .populate('coupon', 'code name discountType discountValue');
+
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
@@ -83,11 +83,13 @@ export const getOrderById = async (req: AuthRequest, res: Response) => {
 // Create order from cart
 export const createOrder = async (req: AuthRequest, res: Response) => {
   try {
-    const { 
-      shippingAddress, 
-      paymentMethod, 
+    const {
+      shippingAddress,
+      paymentMethod,
+      deliveryMethod = 'shipping',
+      pickupBranchId,
       couponCode = '',
-      usePoints = 0 
+      usePoints = 0
     } = req.body;
 
     // Check if user has completed profile
@@ -96,10 +98,17 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    if (!user.phone || !user.address.street) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Please complete your profile with phone number and address first' 
+    if (deliveryMethod === 'shipping' && (!user.phone || !user.address.street) && (!shippingAddress?.street)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please complete your profile or provide shipping address'
+      });
+    }
+
+    if (deliveryMethod === 'pickup' && !pickupBranchId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please select a branch for pickup'
       });
     }
 
@@ -109,9 +118,9 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       .populate('coupon', 'code discountType discountValue pointsBonus');
 
     if (!cart || cart.items.length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Cart is empty' 
+      return res.status(400).json({
+        success: false,
+        message: 'Cart is empty'
       });
     }
 
@@ -122,11 +131,11 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 
     for (const item of cart.items) {
       const product = item.product as any;
-      
+
       if (product.stock < item.quantity) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `Insufficient stock for ${product.name}` 
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient stock for ${product.name}`
         });
       }
 
@@ -149,7 +158,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     }
 
     // Persist any cart item price backfills before proceeding
-    try { await cart.save(); } catch {}
+    try { await cart.save(); } catch { }
 
     // Apply coupon discount
     let discountAmount = 0;
@@ -158,8 +167,8 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       coupon = await Coupon.findOne({ code: couponCode });
       if (coupon && coupon.isValid()) {
         const canBeUsed = coupon.canBeUsedBy(
-          req.user?.id, 
-          subtotal, 
+          req.user?.id,
+          subtotal,
           cart.items.map((item: any) => ({
             product: item.product._id,
             quantity: item.quantity
@@ -219,7 +228,9 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       status: paymentMethod === 'bank_transfer' ? 'waiting_payment' : 'processing',
       pointsUsed,
       pointsEarned,
-      shippingAddress
+      shippingAddress: deliveryMethod === 'shipping' ? shippingAddress : undefined,
+      deliveryMethod,
+      pickupBranch: deliveryMethod === 'pickup' ? pickupBranchId : undefined
     });
 
     await sysOrder.save();
@@ -228,7 +239,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     for (const item of cart.items) {
       const product = item.product as any;
       await Product.findByIdAndUpdate(
-        product._id, 
+        product._id,
         { $inc: { stock: -item.quantity, purchaseCount: item.quantity } }
       );
     }
@@ -265,9 +276,9 @@ export const submitPaymentConfirmation = async (req: AuthRequest, res: Response)
   try {
     const { orderId, paymentImage, note } = req.body; // paymentImage should be Cloudinary URL
 
-    const order = await SystemOrder.findOne({ 
-      _id: orderId, 
-      user: req.user?.id 
+    const order = await SystemOrder.findOne({
+      _id: orderId,
+      user: req.user?.id
     });
 
     if (!order) {
@@ -275,17 +286,17 @@ export const submitPaymentConfirmation = async (req: AuthRequest, res: Response)
     }
 
     if (order.paymentMethod !== 'bank_transfer') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'This order does not require payment confirmation' 
+      return res.status(400).json({
+        success: false,
+        message: 'This order does not require payment confirmation'
       });
     }
 
     // Allow initial submit and re-submit while waiting for admin confirmation
     if (!['pending', 'waiting_confirmation'].includes(order.paymentStatus)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Payment confirmation not allowed at this stage' 
+      return res.status(400).json({
+        success: false,
+        message: 'Payment confirmation not allowed at this stage'
       });
     }
 
@@ -299,10 +310,10 @@ export const submitPaymentConfirmation = async (req: AuthRequest, res: Response)
 
     await order.save();
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       data: order,
-      message: 'Payment confirmation submitted successfully' 
+      message: 'Payment confirmation submitted successfully'
     });
   } catch (error) {
     console.error('Error submitting payment confirmation:', error);
@@ -315,9 +326,9 @@ export const confirmDelivery = async (req: AuthRequest, res: Response) => {
   try {
     const { orderId } = req.params;
 
-    const order = await SystemOrder.findOne({ 
-      _id: orderId, 
-      user: req.user?.id 
+    const order = await SystemOrder.findOne({
+      _id: orderId,
+      user: req.user?.id
     });
 
     if (!order) {
@@ -325,9 +336,9 @@ export const confirmDelivery = async (req: AuthRequest, res: Response) => {
     }
 
     if (order.status !== 'delivered') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Order is not in delivered status' 
+      return res.status(400).json({
+        success: false,
+        message: 'Order is not in delivered status'
       });
     }
 
@@ -351,10 +362,10 @@ export const confirmDelivery = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       data: order,
-      message: 'Order completed successfully' 
+      message: 'Order completed successfully'
     });
   } catch (error) {
     console.error('Error confirming delivery:', error);
@@ -367,9 +378,9 @@ export const markDelivered = async (req: AuthRequest, res: Response) => {
   try {
     const { orderId } = req.params;
 
-    const order = await SystemOrder.findOne({ 
-      _id: orderId, 
-      user: req.user?.id 
+    const order = await SystemOrder.findOne({
+      _id: orderId,
+      user: req.user?.id
     });
 
     if (!order) {
@@ -377,9 +388,9 @@ export const markDelivered = async (req: AuthRequest, res: Response) => {
     }
 
     if (order.status !== 'shipped') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Order is not in shipped status' 
+      return res.status(400).json({
+        success: false,
+        message: 'Order is not in shipped status'
       });
     }
 
@@ -387,10 +398,10 @@ export const markDelivered = async (req: AuthRequest, res: Response) => {
     order.deliveredAt = new Date();
     await order.save();
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       data: order,
-      message: 'Order marked as delivered' 
+      message: 'Order marked as delivered'
     });
   } catch (error) {
     console.error('Error marking delivered:', error);
@@ -404,9 +415,9 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
     const { orderId } = req.params;
     const { reason } = req.body;
 
-    const order = await SystemOrder.findOne({ 
-      _id: orderId, 
-      user: req.user?.id 
+    const order = await SystemOrder.findOne({
+      _id: orderId,
+      user: req.user?.id
     });
 
     if (!order) {
@@ -416,9 +427,9 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
     // Check if order can be cancelled
     const cancellableStatuses = ['pending', 'waiting_payment', 'waiting_confirmation'];
     if (!cancellableStatuses.includes(order.status)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Order cannot be cancelled at this stage' 
+      return res.status(400).json({
+        success: false,
+        message: 'Order cannot be cancelled at this stage'
       });
     }
 
@@ -429,7 +440,7 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
     // Refund stock
     for (const item of order.items) {
       await Product.findByIdAndUpdate(
-        item.product, 
+        item.product,
         { $inc: { stock: item.quantity, purchaseCount: -item.quantity } }
       );
     }
@@ -446,10 +457,10 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
 
     await order.save();
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       data: order,
-      message: 'Order cancelled successfully' 
+      message: 'Order cancelled successfully'
     });
   } catch (error) {
     console.error('Error cancelling order:', error);
@@ -464,9 +475,9 @@ export const purchaseSuggestionPackage = async (req: AuthRequest, res: Response)
 
     const pkg = await SuggestionPackage.findById(packageId);
     if (!pkg || !pkg.isActive) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Suggestion package not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Suggestion package not found'
       });
     }
 
@@ -567,13 +578,13 @@ export const purchaseSuggestionPackage = async (req: AuthRequest, res: Response)
     (purchaser as any).suggestionPackages.push(userSuggestion._id);
     await purchaser.save();
 
-    res.status(201).json({ 
-      success: true, 
+    res.status(201).json({
+      success: true,
       data: {
         order: sysOrder,
         userSuggestion
       },
-      message: 'Suggestion package purchased successfully' 
+      message: 'Suggestion package purchased successfully'
     });
   } catch (error) {
     console.error('Error purchasing suggestion package:', error);
@@ -584,12 +595,12 @@ export const purchaseSuggestionPackage = async (req: AuthRequest, res: Response)
 // Get user's suggestion packages
 export const getUserSuggestionPackages = async (req: AuthRequest, res: Response) => {
   try {
-    const userSuggestions = await UserSuggestion.find({ 
+    const userSuggestions = await UserSuggestion.find({
       user: req.user?.id,
-      isActive: true 
+      isActive: true
     })
-    .populate('package', 'name description suggestionCount validityDays')
-    .sort({ createdAt: -1 });
+      .populate('package', 'name description suggestionCount validityDays')
+      .sort({ createdAt: -1 });
 
     res.json({ success: true, data: userSuggestions });
   } catch (error) {

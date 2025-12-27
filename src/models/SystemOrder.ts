@@ -35,6 +35,8 @@ const SystemOrderSchema = new Schema({
     country: { type: String, required: true },
     notes: { type: String, default: '' }
   },
+  deliveryMethod: { type: String, enum: ['shipping', 'pickup'], default: 'shipping', index: true },
+  pickupBranch: { type: Schema.Types.ObjectId, ref: 'Branch' },
   trackingNumber: { type: String, default: '' },
   shippedAt: { type: Date },
   deliveredAt: { type: Date },
@@ -48,7 +50,7 @@ const SystemOrderSchema = new Schema({
   cancellationReason: { type: String, default: '' },
 }, { timestamps: true, strictPopulate: false });
 
-SystemOrderSchema.pre('save', function(next) {
+SystemOrderSchema.pre('save', function (next) {
   if (!this.orderNumber) {
     const timestamp = Date.now().toString().slice(-8);
     const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');

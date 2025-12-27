@@ -72,16 +72,22 @@ exports.getOrderById = getOrderById;
 // Create order from cart
 const createOrder = async (req, res) => {
     try {
-        const { shippingAddress, paymentMethod, couponCode = '', usePoints = 0 } = req.body;
+        const { shippingAddress, paymentMethod, deliveryMethod = 'shipping', pickupBranchId, couponCode = '', usePoints = 0 } = req.body;
         // Check if user has completed profile
         const user = await user_1.default.findById(req.user?.id);
         if (!user) {
             return res.status(404).json({ success: false, message: 'User not found' });
         }
-        if (!user.phone || !user.address.street) {
+        if (deliveryMethod === 'shipping' && (!user.phone || !user.address.street) && (!shippingAddress?.street)) {
             return res.status(400).json({
                 success: false,
-                message: 'Please complete your profile with phone number and address first'
+                message: 'Please complete your profile or provide shipping address'
+            });
+        }
+        if (deliveryMethod === 'pickup' && !pickupBranchId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Please select a branch for pickup'
             });
         }
         // Get cart
@@ -187,7 +193,9 @@ const createOrder = async (req, res) => {
             status: paymentMethod === 'bank_transfer' ? 'waiting_payment' : 'processing',
             pointsUsed,
             pointsEarned,
-            shippingAddress
+            shippingAddress: deliveryMethod === 'shipping' ? shippingAddress : undefined,
+            deliveryMethod,
+            pickupBranch: deliveryMethod === 'pickup' ? pickupBranchId : undefined
         });
         await sysOrder.save();
         // Update product stock

@@ -3,11 +3,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.searchProducts = exports.validateCoupon = exports.getSuggestionPackages = exports.getFeaturedProducts = exports.getProductCategories = exports.getShopProductById = exports.getShopProducts = void 0;
+exports.getPaymentConfig = exports.getBranches = exports.searchProducts = exports.validateCoupon = exports.getSuggestionPackages = exports.getFeaturedProducts = exports.getProductCategories = exports.getShopProductById = exports.getShopProducts = void 0;
 const Product_1 = __importDefault(require("../models/Product"));
 const Category_1 = __importDefault(require("../models/Category"));
 const Coupon_1 = __importDefault(require("../models/Coupon"));
 const SuggestionPackage_1 = __importDefault(require("../models/SuggestionPackage"));
+const Branch_1 = __importDefault(require("../models/Branch"));
+const PaymentConfig_1 = __importDefault(require("../models/PaymentConfig"));
 // Get all products for shop (public)
 const getShopProducts = async (req, res) => {
     try {
@@ -205,4 +207,28 @@ const searchProducts = async (req, res) => {
     }
 };
 exports.searchProducts = searchProducts;
+// Get branches
+const getBranches = async (req, res) => {
+    try {
+        const branches = await Branch_1.default.find({ isActive: true });
+        res.json({ success: true, data: branches });
+    }
+    catch (error) {
+        console.error('Error getting branches:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+};
+exports.getBranches = getBranches;
+// Get payment config
+const getPaymentConfig = async (req, res) => {
+    try {
+        const config = await PaymentConfig_1.default.findOne({ isActive: true });
+        res.json({ success: true, data: config });
+    }
+    catch (error) {
+        console.error('Error getting payment config:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+};
+exports.getPaymentConfig = getPaymentConfig;
 //# sourceMappingURL=shop.controller.js.map

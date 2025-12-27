@@ -1,1 +1,1 @@
-{"version":3,"file":"SystemOrder.d.ts","sourceRoot":"","sources":["../../src/models/SystemOrder.ts"],"names":[],"mappings":"AAAA,OAAO,QAAmC,MAAM,UAAU,CAAC;AAuE3D,QAAA,MAAM,WAAW,2CAAiE,CAAC;AACnF,eAAe,WAAW,CAAC"}
+{"version":3,"file":"SystemOrder.d.ts","sourceRoot":"","sources":["../../src/models/SystemOrder.ts"],"names":[],"mappings":"AAAA,OAAO,QAAmC,MAAM,UAAU,CAAC;AAyE3D,QAAA,MAAM,WAAW,2CAAiE,CAAC;AACnF,eAAe,WAAW,CAAC"}

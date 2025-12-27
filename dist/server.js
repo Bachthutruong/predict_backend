@@ -36,9 +36,13 @@ const adminCoupon_1 = __importDefault(require("./routes/adminCoupon")); // Impor
 const settings_1 = __importDefault(require("./routes/settings"));
 const adminSuggestionPackage_1 = __importDefault(require("./routes/adminSuggestionPackage")); // Import admin suggestion package routes
 const adminCategory_1 = __importDefault(require("./routes/adminCategory")); // Import admin category routes
+const adminBranch_1 = __importDefault(require("./routes/adminBranch")); // Import admin branch routes
+const adminPaymentConfig_1 = __importDefault(require("./routes/adminPaymentConfig")); // Import admin payment config routes
 const shop_1 = __importDefault(require("./routes/shop")); // Import shop routes
 const cart_1 = __importDefault(require("./routes/cart")); // Import cart routes
 const order_1 = __importDefault(require("./routes/order")); // Import order routes
+const review_1 = __importDefault(require("./routes/review"));
+const chat_1 = __importDefault(require("./routes/chat"));
 console.log('🔍 Webhook routes imported:', typeof webhook_1.default, webhook_1.default);
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5001;
@@ -191,6 +195,8 @@ app.use('/api/admin/system-orders', adminSystemOrder_1.default);
 app.use('/api/admin/coupons', adminCoupon_1.default); // Use admin coupon routes
 app.use('/api/admin/suggestion-packages', adminSuggestionPackage_1.default); // Use admin suggestion package routes
 app.use('/api/admin/categories', adminCategory_1.default); // Use admin category routes
+app.use('/api/admin/branches', adminBranch_1.default); // Use admin branch routes
+app.use('/api/admin/payment-config', adminPaymentConfig_1.default); // Use admin payment config routes
 app.use('/api/admin', admin_1.default);
 app.use('/api/staff', staff_1.default);
 app.use('/api/check-in', check_in_1.default);
@@ -202,6 +208,8 @@ app.use('/api/voting', voting_1.default); // Use voting routes
 app.use('/api/shop', shop_1.default); // Use shop routes
 app.use('/api/cart', cart_1.default); // Use cart routes
 app.use('/api/orders', order_1.default); // Use order routes
+app.use('/api/reviews', review_1.default);
+app.use('/api/chat', chat_1.default);
 app.use('/api/settings', settings_1.default); // Settings routes (public + admin)
 // 404 handler
 app.use('*', (req, res) => {

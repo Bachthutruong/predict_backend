@@ -20,5 +20,6 @@ router.put('/:id', adminProduct_controller_1.updateProduct);
 router.delete('/:id', adminProduct_controller_1.deleteProduct);
 router.patch('/:id/toggle-status', adminProduct_controller_1.toggleProductStatus);
 router.patch('/:id/stock', adminProduct_controller_1.updateProductStock);
+router.get('/:id/inventory-history', adminProduct_controller_1.getInventoryHistory);
 exports.default = router;
 //# sourceMappingURL=adminProduct.js.map

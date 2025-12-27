@@ -3,8 +3,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateProductStock = exports.getProductCategories = exports.toggleProductStatus = exports.deleteProduct = exports.updateProduct = exports.createProduct = exports.getProductById = exports.getAllProducts = void 0;
+exports.getInventoryHistory = exports.updateProductStock = exports.getProductCategories = exports.toggleProductStatus = exports.deleteProduct = exports.updateProduct = exports.createProduct = exports.getProductById = exports.getAllProducts = void 0;
 const Product_1 = __importDefault(require("../models/Product"));
+const InventoryLog_1 = __importDefault(require("../models/InventoryLog"));
 // Get all products with pagination and filters
 const getAllProducts = async (req, res) => {
     try {
@@ -209,24 +210,47 @@ exports.getProductCategories = getProductCategories;
 const updateProductStock = async (req, res) => {
     try {
         const { id } = req.params;
-        const { stock, operation = 'set' } = req.body; // operation: 'set', 'add', 'subtract'
+        const { stock, operation = 'set', reason = '', note = '' } = req.body; // operation: 'set', 'add', 'subtract'
         const product = await Product_1.default.findById(id);
         if (!product) {
             return res.status(404).json({ success: false, message: 'Product not found' });
         }
+        const previousStock = product.stock;
+        let changeAmount = 0;
         switch (operation) {
             case 'add':
                 product.stock += stock;
+                changeAmount = stock;
                 break;
             case 'subtract':
+                changeAmount = -stock;
                 product.stock = Math.max(0, product.stock - stock);
                 break;
             case 'set':
             default:
+                changeAmount = stock - previousStock;
                 product.stock = stock;
                 break;
         }
         await product.save();
+        // Log inventory change
+        try {
+            if (changeAmount !== 0) {
+                await InventoryLog_1.default.create({
+                    product: product._id,
+                    changeAmount,
+                    previousStock,
+                    newStock: product.stock,
+                    type: operation === 'add' ? 'import' : (operation === 'subtract' ? 'export' : 'adjustment'),
+                    reason: reason || 'Manual update',
+                    note,
+                    performedBy: req.user?.id
+                });
+            }
+        }
+        catch (logError) {
+            console.error('Failed to log inventory change:', logError);
+        }
         res.json({
             success: true,
             data: product,
@@ -239,4 +263,31 @@ const updateProductStock = async (req, res) => {
     }
 };
 exports.updateProductStock = updateProductStock;
+// Get product inventory history
+const getInventoryHistory = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { page = 1, limit = 20 } = req.query;
+        const history = await InventoryLog_1.default.find({ product: id })
+            .populate('performedBy', 'name email')
+            .sort({ createdAt: -1 })
+            .limit(Number(limit))
+            .skip((Number(page) - 1) * Number(limit));
+        const total = await InventoryLog_1.default.countDocuments({ product: id });
+        res.json({
+            success: true,
+            data: history,
+            pagination: {
+                current: Number(page),
+                pages: Math.ceil(total / Number(limit)),
+                total
+            }
+        });
+    }
+    catch (error) {
+        console.error('Error getting inventory history:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+};
+exports.getInventoryHistory = getInventoryHistory;
 //# sourceMappingURL=adminProduct.controller.js.map

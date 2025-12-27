@@ -35,6 +35,8 @@ const SystemOrderSchema = new mongoose_1.Schema({
         country: { type: String, required: true },
         notes: { type: String, default: '' }
     },
+    deliveryMethod: { type: String, enum: ['shipping', 'pickup'], default: 'shipping', index: true },
+    pickupBranch: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Branch' },
     trackingNumber: { type: String, default: '' },
     shippedAt: { type: Date },
     deliveredAt: { type: Date },
