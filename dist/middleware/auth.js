@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.staffMiddleware = exports.authorize = exports.authenticate = void 0;
+exports.optionalAuthenticate = exports.staffMiddleware = exports.authorize = exports.authenticate = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const user_1 = __importDefault(require("../models/user"));
 const authenticate = async (req, res, next) => {
@@ -52,4 +52,35 @@ const staffMiddleware = (req, res, next) => {
     next();
 };
 exports.staffMiddleware = staffMiddleware;
+// Optional authentication - doesn't fail if no token, but sets user if token is valid
+const optionalAuthenticate = async (req, res, next) => {
+    try {
+        const token = req.header('Authorization')?.replace('Bearer ', '');
+        if (token) {
+            try {
+                const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
+                const user = await user_1.default.findById(decoded.userId).select('-password');
+                if (user) {
+                    req.user = {
+                        id: user.id,
+                        email: user.email,
+                        name: user.name,
+                        role: user.role,
+                        isEmailVerified: user.isEmailVerified
+                    };
+                }
+            }
+            catch (error) {
+                // Invalid token, but continue without user
+                console.log('Optional auth: Invalid token, continuing as guest');
+            }
+        }
+        next();
+    }
+    catch (error) {
+        // Continue without authentication
+        next();
+    }
+};
+exports.optionalAuthenticate = optionalAuthenticate;
 //# sourceMappingURL=auth.js.map

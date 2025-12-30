@@ -144,9 +144,20 @@ exports.deleteSystemOrder = deleteSystemOrder;
 const updateSystemOrderStatus = async (req, res) => {
     try {
         const { status, adminNotes } = req.body;
-        const order = await SystemOrder_1.default.findById(req.params.id).populate('user', 'points');
+        // Populate user and items.product to get all needed data
+        const order = await SystemOrder_1.default.findById(req.params.id)
+            .populate('user', 'points')
+            .populate('items.product', 'pointsReward');
         if (!order)
             return res.status(404).json({ success: false, message: 'Order not found' });
+        // Validate: Payment status must be 'paid' before allowing certain status changes
+        const statusesRequiringPayment = ['processing', 'shipped', 'delivered', 'completed'];
+        if (status && statusesRequiringPayment.includes(status) && order.paymentStatus !== 'paid') {
+            return res.status(400).json({
+                success: false,
+                message: `Cannot change order status to '${status}' because payment status is '${order.paymentStatus}'. Please update payment status to 'paid' first.`
+            });
+        }
         const oldStatus = order.status;
         order.status = status || order.status;
         if (adminNotes)
@@ -156,61 +167,134 @@ const updateSystemOrderStatus = async (req, res) => {
         if (status === 'delivered')
             order.deliveredAt = new Date();
         if (status === 'completed') {
-            // Award points to user when completed
-            try {
-                const userId = order.user?._id || order.user || undefined;
-                const pointsToAdd = Number(order.pointsEarned || 0);
-                console.log(`[SystemOrder] Completing order=${order._id} user=${userId} paymentStatus=${order.paymentStatus} status=${order.status} pointsEarned=${pointsToAdd}`);
-                if (!userId) {
-                    console.warn('[SystemOrder] No user id on order, cannot credit points');
-                }
-                else if (!Number.isFinite(pointsToAdd) || pointsToAdd <= 0) {
-                    console.warn(`[SystemOrder] pointsEarned invalid (${order.pointsEarned}) for order ${order._id}`);
-                }
-                else {
-                    const user = await user_1.default.findById(userId);
-                    if (!user) {
-                        console.warn(`[SystemOrder] User ${userId} not found when crediting points for order ${order._id}`);
+            // Award points to user when completed (only if not already completed)
+            if (oldStatus !== 'completed') {
+                try {
+                    // Get user ID - handle both populated and non-populated cases
+                    let userId;
+                    if (order.user) {
+                        userId = typeof order.user === 'object' && order.user._id
+                            ? order.user._id.toString()
+                            : order.user?.toString() || order.user;
+                    }
+                    let pointsToAdd = Number(order.pointsEarned || 0);
+                    // Fallback: If pointsEarned is 0 or invalid, try to recalculate from items
+                    if ((!Number.isFinite(pointsToAdd) || pointsToAdd <= 0) && order.items && order.items.length > 0) {
+                        console.log(`[SystemOrder] pointsEarned is ${pointsToAdd}, recalculating from items for order ${order._id}`);
+                        pointsToAdd = 0;
+                        // Items are already populated above
+                        if (order.items) {
+                            for (const item of order.items) {
+                                const product = item.product;
+                                if (product) {
+                                    const productPointsReward = Number(product.pointsReward || 0);
+                                    const itemQuantity = Number(item.quantity || 1);
+                                    const itemPoints = productPointsReward * itemQuantity;
+                                    pointsToAdd += itemPoints;
+                                    console.log(`[SystemOrder] Item ${product.name || product._id}: ${itemPoints} points (${productPointsReward} x ${itemQuantity})`);
+                                }
+                            }
+                        }
+                        // Update the order with recalculated points
+                        if (pointsToAdd > 0) {
+                            order.pointsEarned = pointsToAdd;
+                            console.log(`[SystemOrder] Recalculated pointsEarned=${pointsToAdd} for order ${order._id}`);
+                        }
+                    }
+                    console.log(`[SystemOrder] Completing order=${order._id} orderNumber=${order.orderNumber} user=${userId} paymentStatus=${order.paymentStatus} status=${order.status} pointsEarned=${pointsToAdd} itemsCount=${order.items?.length || 0}`);
+                    if (!userId) {
+                        console.warn(`[SystemOrder] No user id on order ${order._id} (orderNumber: ${order.orderNumber}), cannot credit points. This is likely a guest order.`);
+                    }
+                    else if (!Number.isFinite(pointsToAdd) || pointsToAdd <= 0) {
+                        console.warn(`[SystemOrder] pointsEarned invalid (${pointsToAdd}) for order ${order._id}. Items: ${order.items?.length || 0}`);
                     }
                     else {
-                        user.points = Math.max(0, Number(user.points || 0)) + pointsToAdd;
-                        await user.save();
-                        console.log(`[SystemOrder] Credited ${pointsToAdd} points to user ${user._id}. New balance=${user.points}`);
-                        try {
-                            await point_transaction_1.default.create({
-                                userId: user._id,
-                                amount: pointsToAdd,
-                                reason: 'order-completion',
-                                notes: `Order ${order.orderNumber} (${order.orderType || 'shop'})`,
-                            });
+                        const user = await user_1.default.findById(userId);
+                        if (!user) {
+                            console.warn(`[SystemOrder] User ${userId} not found when crediting points for order ${order._id}`);
                         }
-                        catch (txErr) {
-                            console.warn('[SystemOrder] Failed to log point transaction', txErr);
+                        else {
+                            // Check if points were already awarded by checking PointTransaction
+                            const existingTransaction = await point_transaction_1.default.findOne({
+                                userId: user._id,
+                                reason: 'order-completion',
+                                notes: { $regex: order.orderNumber }
+                            });
+                            if (!existingTransaction) {
+                                const oldPoints = Number(user.points || 0);
+                                user.points = Math.max(0, oldPoints) + pointsToAdd;
+                                await user.save();
+                                console.log(`[SystemOrder] ✅ Credited ${pointsToAdd} points to user ${user._id}. Old balance=${oldPoints}, New balance=${user.points}`);
+                                try {
+                                    await point_transaction_1.default.create({
+                                        userId: user._id,
+                                        amount: pointsToAdd,
+                                        reason: 'order-completion',
+                                        notes: `Order ${order.orderNumber} (${order.orderType || 'shop'})`,
+                                    });
+                                    console.log(`[SystemOrder] ✅ Point transaction logged for order ${order.orderNumber}`);
+                                }
+                                catch (txErr) {
+                                    console.warn('[SystemOrder] Failed to log point transaction', txErr);
+                                }
+                            }
+                            else {
+                                console.log(`[SystemOrder] ⚠️ Points already awarded for order ${order.orderNumber}. Transaction ID: ${existingTransaction._id}`);
+                            }
                         }
                     }
+                    // Save order after updating pointsEarned (if recalculated)
+                    if (order.isModified('pointsEarned')) {
+                        await order.save();
+                    }
                 }
-            }
-            catch (error) {
-                console.error('[SystemOrder] Error crediting points:', error);
+                catch (error) {
+                    console.error('[SystemOrder] Error crediting points:', error);
+                }
             }
         }
         if (status === 'cancelled') {
+            order.cancelledAt = new Date();
             // If order was previously completed, revoke awarded points
-            try {
-                if (oldStatus === 'completed') {
-                    const user = await user_1.default.findById(order.user);
-                    if (user) {
-                        user.points = Math.max(0, user.points - Number(order.pointsEarned || 0));
-                        await user.save();
+            if (oldStatus === 'completed' && order.pointsEarned > 0) {
+                try {
+                    const userId = order.user?._id || order.user || undefined;
+                    if (userId) {
+                        const user = await user_1.default.findById(userId);
+                        if (user) {
+                            user.points = Math.max(0, Number(user.points || 0) - Number(order.pointsEarned || 0));
+                            await user.save();
+                            console.log(`[SystemOrder] Revoked ${order.pointsEarned} points from user ${user._id} due to cancellation`);
+                        }
                     }
                 }
+                catch (error) {
+                    console.error('[SystemOrder] Error revoking points:', error);
+                }
             }
-            catch { }
+            // Refund points used (add back to user) if not already refunded
+            if (!order.pointsRefunded && order.pointsUsed > 0) {
+                try {
+                    const userId = order.user?._id || order.user || undefined;
+                    if (userId) {
+                        const user = await user_1.default.findById(userId);
+                        if (user) {
+                            user.points = Math.max(0, Number(user.points || 0) + Number(order.pointsUsed || 0));
+                            await user.save();
+                            order.pointsRefunded = true;
+                        }
+                    }
+                }
+                catch (error) {
+                    console.error('[SystemOrder] Error refunding points:', error);
+                }
+            }
         }
         await order.save();
         res.json({ success: true, data: order });
     }
     catch (e) {
+        console.error('[SystemOrder] Error updating order status:', e);
         res.status(500).json({ success: false, message: 'Internal server error' });
     }
 };

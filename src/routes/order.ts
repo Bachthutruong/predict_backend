@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticate } from '../middleware/auth';
+import { authenticate, optionalAuthenticate } from '../middleware/auth';
 // Payment images are uploaded by client to Cloudinary directly. API receives URL.
 import {
   getUserOrders,
@@ -16,14 +16,18 @@ import {
 
 const router = express.Router();
 
-// All routes require authentication
+// Create order allows guest checkout (optional auth)
+router.post('/', optionalAuthenticate, createOrder);
+
+// Get order by ID allows guest access (optional auth)
+router.get('/:id', optionalAuthenticate, getOrderById);
+
+// All other routes require authentication
 router.use(authenticate);
 
 // Order management routes
 router.get('/', getUserOrders);
 router.get('/suggestion-packages', getUserSuggestionPackages);
-router.get('/:id', getOrderById);
-router.post('/', createOrder);
 router.post('/payment-confirmation', submitPaymentConfirmation);
 router.post('/:id/confirm-delivery', confirmDelivery);
 router.post('/:id/mark-delivered', markDelivered);

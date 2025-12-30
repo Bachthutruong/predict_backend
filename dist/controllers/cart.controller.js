@@ -7,10 +7,25 @@ exports.removeCoupon = exports.applyCoupon = exports.clearCart = exports.removeF
 const Cart_1 = __importDefault(require("../models/Cart"));
 const Product_1 = __importDefault(require("../models/Product"));
 const Coupon_1 = __importDefault(require("../models/Coupon"));
-// Get user's cart
+// Helper to get cart identifier (user ID or guestId)
+const getCartIdentifier = (req) => {
+    if (req.user?.id) {
+        return { user: req.user.id };
+    }
+    const guestId = req.header('X-Guest-Id') || req.body.guestId;
+    if (guestId) {
+        return { guestId };
+    }
+    return null;
+};
+// Get user's or guest's cart
 const getCart = async (req, res) => {
     try {
-        const cart = await Cart_1.default.findOne({ user: req.user?.id })
+        const identifier = getCartIdentifier(req);
+        if (!identifier) {
+            return res.json({ success: true, data: { items: [], total: 0, subtotal: 0, discount: 0 } });
+        }
+        const cart = await Cart_1.default.findOne(identifier)
             .populate('items.product', 'name images price originalPrice stock pointsReward')
             .populate('coupon', 'code name discountType discountValue pointsBonus');
         if (!cart) {
@@ -70,9 +85,16 @@ const addToCart = async (req, res) => {
             });
         }
         // Get or create cart
-        let cart = await Cart_1.default.findOne({ user: req.user?.id });
+        const identifier = getCartIdentifier(req);
+        if (!identifier) {
+            return res.status(400).json({
+                success: false,
+                message: 'Guest ID required for guest users'
+            });
+        }
+        let cart = await Cart_1.default.findOne(identifier);
         if (!cart) {
-            cart = new Cart_1.default({ user: req.user?.id, items: [] });
+            cart = new Cart_1.default({ ...identifier, items: [] });
         }
         // Normalize variant - treat empty object, null, and undefined as the same
         const normalizedVariant = variant && Object.keys(variant).length > 0 ? variant : null;
@@ -123,7 +145,14 @@ const updateCartItem = async (req, res) => {
                 message: 'Quantity must be at least 1'
             });
         }
-        const cart = await Cart_1.default.findOne({ user: req.user?.id });
+        const identifier = getCartIdentifier(req);
+        if (!identifier) {
+            return res.status(400).json({
+                success: false,
+                message: 'Guest ID required for guest users'
+            });
+        }
+        const cart = await Cart_1.default.findOne(identifier);
         if (!cart) {
             return res.status(404).json({
                 success: false,
@@ -163,7 +192,14 @@ exports.updateCartItem = updateCartItem;
 const removeFromCart = async (req, res) => {
     try {
         const { itemId } = req.params;
-        const cart = await Cart_1.default.findOne({ user: req.user?.id });
+        const identifier = getCartIdentifier(req);
+        if (!identifier) {
+            return res.status(400).json({
+                success: false,
+                message: 'Guest ID required for guest users'
+            });
+        }
+        const cart = await Cart_1.default.findOne(identifier);
         if (!cart) {
             return res.status(404).json({
                 success: false,
@@ -187,7 +223,14 @@ exports.removeFromCart = removeFromCart;
 // Clear cart
 const clearCart = async (req, res) => {
     try {
-        const cart = await Cart_1.default.findOne({ user: req.user?.id });
+        const identifier = getCartIdentifier(req);
+        if (!identifier) {
+            return res.status(400).json({
+                success: false,
+                message: 'Guest ID required for guest users'
+            });
+        }
+        const cart = await Cart_1.default.findOne(identifier);
         if (!cart) {
             return res.status(404).json({
                 success: false,
@@ -214,7 +257,14 @@ exports.clearCart = clearCart;
 const applyCoupon = async (req, res) => {
     try {
         const { couponCode } = req.body;
-        const cart = await Cart_1.default.findOne({ user: req.user?.id })
+        const identifier = getCartIdentifier(req);
+        if (!identifier) {
+            return res.status(400).json({
+                success: false,
+                message: 'Guest ID required for guest users'
+            });
+        }
+        const cart = await Cart_1.default.findOne(identifier)
             .populate('items.product', 'name price category');
         if (!cart) {
             return res.status(404).json({
@@ -238,8 +288,14 @@ const applyCoupon = async (req, res) => {
         }
         // Calculate order amount
         const orderAmount = cart.items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
-        // Validate coupon
-        const canBeUsed = coupon.canBeUsedBy(req.user?.id, orderAmount, cart.items.map((item) => ({
+        // Validate coupon (only for logged-in users)
+        if (!req.user?.id) {
+            return res.status(401).json({
+                success: false,
+                message: 'Please login to use coupons'
+            });
+        }
+        const canBeUsed = coupon.canBeUsedBy(req.user.id, orderAmount, cart.items.map((item) => ({
             product: item.product._id,
             quantity: item.quantity
         })));
@@ -267,7 +323,14 @@ exports.applyCoupon = applyCoupon;
 // Remove coupon from cart
 const removeCoupon = async (req, res) => {
     try {
-        const cart = await Cart_1.default.findOne({ user: req.user?.id });
+        const identifier = getCartIdentifier(req);
+        if (!identifier) {
+            return res.status(400).json({
+                success: false,
+                message: 'Guest ID required for guest users'
+            });
+        }
+        const cart = await Cart_1.default.findOne(identifier);
         if (!cart) {
             return res.status(404).json({
                 success: false,

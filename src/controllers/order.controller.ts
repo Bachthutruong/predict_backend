@@ -62,10 +62,18 @@ export const getUserOrders = async (req: AuthRequest, res: Response) => {
 export const getOrderById = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const order = await SystemOrder.findOne({
-      _id: id,
-      user: req.user?.id
-    })
+    
+    // Build query - if user is logged in, check by user ID; if guest, allow access by order ID
+    const query: any = { _id: id };
+    
+    // If user is logged in, only show their orders
+    // If guest, allow access (they can only access orders they just created)
+    if (req.user?.id) {
+      query.user = req.user.id;
+    }
+    // For guests, we don't restrict by user (they can view order by ID)
+    
+    const order = await SystemOrder.findOne(query)
       .populate('items.product', 'name images price pointsReward')
       .populate('coupon', 'code name discountType discountValue');
 
@@ -89,20 +97,35 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       deliveryMethod = 'shipping',
       pickupBranchId,
       couponCode = '',
-      usePoints = 0
+      usePoints = 0,
+      selectedItemIds = [] // Array of selected cart item IDs
     } = req.body;
 
-    // Check if user has completed profile
-    const user = await User.findById(req.user?.id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
+    const isGuest = !req.user?.id;
+    const { guestId } = req.body;
 
-    if (deliveryMethod === 'shipping' && (!user.phone || !user.address.street) && (!shippingAddress?.street)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please complete your profile or provide shipping address'
-      });
+    // For logged-in users, check profile
+    let user = null;
+    if (req.user?.id) {
+      user = await User.findById(req.user.id);
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+
+      if (deliveryMethod === 'shipping' && (!user.phone || !user.address.street) && (!shippingAddress?.street)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please complete your profile or provide shipping address'
+        });
+      }
+    } else {
+      // For guests, require shipping address
+      if (deliveryMethod === 'shipping' && (!shippingAddress?.street || !shippingAddress?.phone)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please provide shipping address and phone number'
+        });
+      }
     }
 
     if (deliveryMethod === 'pickup' && !pickupBranchId) {
@@ -112,10 +135,72 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Get cart
-    const cart = await Cart.findOne({ user: req.user?.id })
-      .populate('items.product', 'name price stock pointsReward')
-      .populate('coupon', 'code discountType discountValue pointsBonus');
+    // Get cart - for users, get user cart; for guests, get guest cart
+    let cart = null;
+    if (req.user?.id) {
+      // Get user cart, or merge guest cart if provided
+      cart = await Cart.findOne({ user: req.user.id })
+        .populate('items.product', 'name price stock pointsReward')
+        .populate('coupon', 'code discountType discountValue pointsBonus');
+
+      // If user has a guest cart to merge (from localStorage)
+      if (guestId && guestId !== req.user.id) {
+        const guestCart = await Cart.findOne({ guestId })
+          .populate('items.product', 'name price stock pointsReward')
+          .populate('coupon', 'code discountType discountValue pointsBonus');
+
+        if (guestCart && guestCart.items.length > 0) {
+          if (!cart) {
+            // Create new cart from guest cart
+            cart = new Cart({
+              user: req.user.id,
+              items: guestCart.items,
+              coupon: guestCart.coupon,
+              couponCode: guestCart.couponCode
+            });
+            await cart.save();
+            // Delete guest cart
+            await Cart.deleteOne({ guestId });
+          } else {
+            // Merge guest cart items into user cart
+            for (const guestItem of guestCart.items) {
+              const existingItemIndex = cart.items.findIndex((item: any) => {
+                const itemVariant = item.variant && Object.keys(item.variant).length > 0 ? item.variant : null;
+                const guestVariant = guestItem.variant && Object.keys(guestItem.variant).length > 0 ? guestItem.variant : null;
+                const isSameProduct = item.product.toString() === guestItem.product.toString();
+                const isSameVariant = JSON.stringify(itemVariant) === JSON.stringify(guestVariant);
+                return isSameProduct && isSameVariant;
+              });
+
+              if (existingItemIndex > -1) {
+                cart.items[existingItemIndex].quantity += guestItem.quantity;
+              } else {
+                cart.items.push(guestItem);
+              }
+            }
+            // Use guest cart coupon if user cart doesn't have one
+            if (!cart.coupon && guestCart.coupon) {
+              cart.coupon = guestCart.coupon;
+              cart.couponCode = guestCart.couponCode;
+            }
+            await cart.save();
+            // Delete guest cart
+            await Cart.deleteOne({ guestId });
+          }
+        }
+      }
+    } else {
+      // Guest checkout - get guest cart
+      if (!guestId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Guest ID is required for guest checkout'
+        });
+      }
+      cart = await Cart.findOne({ guestId })
+        .populate('items.product', 'name price stock pointsReward')
+        .populate('coupon', 'code discountType discountValue pointsBonus');
+    }
 
     if (!cart || cart.items.length === 0) {
       return res.status(400).json({
@@ -124,12 +209,27 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // Filter cart items to only include selected items (if any selected)
+    let itemsToProcess = cart.items;
+    if (selectedItemIds && selectedItemIds.length > 0) {
+      itemsToProcess = cart.items.filter((item: any) => 
+        selectedItemIds.includes(item._id.toString())
+      );
+      
+      if (itemsToProcess.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'No items selected for checkout'
+        });
+      }
+    }
+
     // Validate stock and calculate totals
     let subtotal = 0;
     let pointsEarned = 0;
     const orderItems = [];
 
-    for (const item of cart.items) {
+    for (const item of itemsToProcess) {
       const product = item.product as any;
 
       if (product.stock < item.quantity) {
@@ -146,13 +246,20 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       }
       const itemTotal = item.quantity * itemPrice;
       subtotal += itemTotal;
-      pointsEarned += item.quantity * product.pointsReward;
+      
+      // Calculate points: ensure pointsReward is a valid number
+      const productPointsReward = Number(product.pointsReward || 0);
+      const itemQuantity = Number(item.quantity || 1);
+      const itemPointsEarned = productPointsReward * itemQuantity;
+      pointsEarned += itemPointsEarned;
+      
+      console.log(`[Order] Product ${product.name}: ${itemQuantity} x ${productPointsReward} points = ${itemPointsEarned} points`);
 
       orderItems.push({
         product: product._id,
         quantity: item.quantity,
         price: itemPrice,
-        pointsEarned: item.quantity * product.pointsReward,
+        pointsEarned: itemPointsEarned,
         variant: item.variant
       });
     }
@@ -166,7 +273,8 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     if (couponCode) {
       coupon = await Coupon.findOne({ code: couponCode });
       if (coupon && coupon.isValid()) {
-        const canBeUsed = coupon.canBeUsedBy(
+        // For guests, skip user-specific validation
+        const canBeUsed = isGuest ? true : coupon.canBeUsedBy(
           req.user?.id,
           subtotal,
           cart.items.map((item: any) => ({
@@ -185,9 +293,9 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // Apply points discount
+    // Apply points discount (only for logged-in users)
     let pointsUsed = 0;
-    if (usePoints > 0 && user.points >= usePoints) {
+    if (!isGuest && usePoints > 0 && user && user.points >= usePoints) {
       pointsUsed = Math.min(usePoints, subtotal - discountAmount);
       discountAmount += pointsUsed;
     }
@@ -200,16 +308,107 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       shippingCost = 100; // Fixed shipping cost
     }
 
-    // Bank transfer bonus points
-    if (paymentMethod === 'bank_transfer') {
-      pointsEarned += 100;
+    // Guest users don't earn points
+    if (isGuest) {
+      console.log(`[Order] Guest order - setting pointsEarned to 0`);
+      pointsEarned = 0;
     }
+    
+    console.log(`[Order] Total pointsEarned calculated: ${pointsEarned} (from ${itemsToProcess.length} items)`);
 
     const totalAmount = Math.max(0, subtotal - discountAmount + shippingCost);
 
+    // Prepare shipping address - always required by model, even for pickup
+    // Helper function to ensure non-empty string values
+    const ensureNonEmpty = (value: any, defaultValue: string): string => {
+      if (value && typeof value === 'string' && value.trim().length > 0) {
+        return value.trim();
+      }
+      return defaultValue;
+    };
+
+    let finalShippingAddress: any;
+    
+    // For pickup orders, we still need a valid address (can use minimal info)
+    if (deliveryMethod === 'pickup') {
+      // For pickup, use provided address or user's address, or minimal address
+      if (user && user.address && user.address.street && user.address.street.trim()) {
+        finalShippingAddress = {
+          name: ensureNonEmpty(user.name || shippingAddress?.name, 'Customer'),
+          phone: ensureNonEmpty(user.phone || shippingAddress?.phone, 'N/A'),
+          street: ensureNonEmpty(user.address.street, 'Store Pickup'),
+          city: ensureNonEmpty(user.address.city, 'N/A'),
+          state: ensureNonEmpty(user.address.state, 'VN'),
+          postalCode: ensureNonEmpty(user.address.postalCode, '10000'),
+          country: ensureNonEmpty(user.address.country, 'Vietnam'),
+          notes: 'Store pickup order'
+        };
+      } else if (shippingAddress && shippingAddress.street && shippingAddress.street.trim()) {
+        finalShippingAddress = {
+          name: ensureNonEmpty(shippingAddress.name, 'Customer'),
+          phone: ensureNonEmpty(shippingAddress.phone, 'N/A'),
+          street: ensureNonEmpty(shippingAddress.street, 'Store Pickup'),
+          city: ensureNonEmpty(shippingAddress.city, 'N/A'),
+          state: ensureNonEmpty(shippingAddress.state, 'VN'),
+          postalCode: ensureNonEmpty(shippingAddress.postalCode, '10000'),
+          country: ensureNonEmpty(shippingAddress.country, 'Vietnam'),
+          notes: 'Store pickup order'
+        };
+      } else {
+        // Minimal address for pickup (required by model)
+        finalShippingAddress = {
+          name: 'Customer',
+          phone: 'N/A',
+          street: 'Store Pickup',
+          city: 'N/A',
+          state: 'VN',
+          postalCode: '10000',
+          country: 'Vietnam',
+          notes: 'Store pickup order'
+        };
+      }
+    } else {
+      // For shipping, must have valid address
+      if (user && user.address && user.address.street && user.address.street.trim()) {
+        finalShippingAddress = {
+          name: ensureNonEmpty(user.name || shippingAddress?.name, 'Customer'),
+          phone: ensureNonEmpty(user.phone || shippingAddress?.phone, 'N/A'),
+          street: ensureNonEmpty(user.address.street || shippingAddress?.street, 'N/A'),
+          city: ensureNonEmpty(user.address.city || shippingAddress?.city, 'N/A'),
+          state: ensureNonEmpty(user.address.state || shippingAddress?.state, 'VN'),
+          postalCode: ensureNonEmpty(user.address.postalCode || shippingAddress?.postalCode, '10000'),
+          country: ensureNonEmpty(user.address.country || shippingAddress?.country, 'Vietnam'),
+          notes: shippingAddress?.notes || ''
+        };
+      } else if (shippingAddress) {
+        finalShippingAddress = {
+          name: ensureNonEmpty(shippingAddress.name, 'Customer'),
+          phone: ensureNonEmpty(shippingAddress.phone, 'N/A'),
+          street: ensureNonEmpty(shippingAddress.street, 'N/A'),
+          city: ensureNonEmpty(shippingAddress.city, 'N/A'),
+          state: ensureNonEmpty(shippingAddress.state, 'VN'),
+          postalCode: ensureNonEmpty(shippingAddress.postalCode, '10000'),
+          country: ensureNonEmpty(shippingAddress.country, 'Vietnam'),
+          notes: shippingAddress.notes || ''
+        };
+      } else {
+        // This should not happen if validation works, but provide fallback
+        finalShippingAddress = {
+          name: 'Customer',
+          phone: 'N/A',
+          street: 'N/A',
+          city: 'N/A',
+          state: 'VN',
+          postalCode: '10000',
+          country: 'Vietnam',
+          notes: ''
+        };
+      }
+    }
+
     // Create system order (user orders use system-order API cluster)
     const sysOrder = new SystemOrder({
-      user: req.user?.id,
+      user: req.user?.id || undefined, // Guest orders have no user
       orderType: 'shop',
       items: orderItems.map((it: any) => ({
         product: it.product,
@@ -228,15 +427,15 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       status: paymentMethod === 'bank_transfer' ? 'waiting_payment' : 'processing',
       pointsUsed,
       pointsEarned,
-      shippingAddress: deliveryMethod === 'shipping' ? shippingAddress : undefined,
+      shippingAddress: finalShippingAddress, // Always provide shipping address
       deliveryMethod,
       pickupBranch: deliveryMethod === 'pickup' ? pickupBranchId : undefined
     });
 
     await sysOrder.save();
 
-    // Update product stock
-    for (const item of cart.items) {
+    // Update product stock (only for selected items)
+    for (const item of itemsToProcess) {
       const product = item.product as any;
       await Product.findByIdAndUpdate(
         product._id,
@@ -252,16 +451,23 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       await coupon.save();
     }
 
-    // Update user points
-    if (pointsUsed > 0) {
+    // Update user points (only for logged-in users)
+    if (!isGuest && user && pointsUsed > 0) {
       user.points -= pointsUsed;
+      await user.save();
     }
-    await user.save();
 
-    // Clear cart
-    cart.items = [];
-    cart.coupon = undefined;
-    cart.couponCode = '';
+    // Remove ordered items from cart (only selected items)
+    if (selectedItemIds && selectedItemIds.length > 0) {
+      cart.items = cart.items.filter((item: any) => 
+        !selectedItemIds.includes(item._id.toString())
+      );
+    } else {
+      // If no selection, clear entire cart
+      cart.items = [];
+      cart.coupon = undefined;
+      cart.couponCode = '';
+    }
     await cart.save();
 
     res.status(201).json({ success: true, data: sysOrder, message: 'Order created successfully' });
@@ -345,20 +551,36 @@ export const confirmDelivery = async (req: AuthRequest, res: Response) => {
     order.status = 'completed';
     await order.save();
 
-    // Add points to user
+    // Add points to user (only if not already awarded)
     const user = await User.findById(req.user?.id);
-    if (user) {
-      user.points += order.pointsEarned;
-      await user.save();
-      try {
-        await PointTransaction.create({
-          userId: user._id,
-          amount: Math.max(0, Number(order.pointsEarned || 0)),
-          reason: 'order-completion',
-          notes: `Order ${order.orderNumber}`,
-        });
-      } catch (err) {
-        console.warn('Failed to log point transaction for completed order', err);
+    if (user && order.pointsEarned > 0) {
+      // Check if points were already awarded by checking PointTransaction
+      const existingTransaction = await PointTransaction.findOne({
+        userId: user._id,
+        reason: 'order-completion',
+        notes: { $regex: order.orderNumber }
+      });
+      
+      if (!existingTransaction) {
+        const oldPoints = Number(user.points || 0);
+        const pointsToAdd = Number(order.pointsEarned || 0);
+        user.points = Math.max(0, oldPoints) + pointsToAdd;
+        await user.save();
+        console.log(`[Order] ✅ Credited ${pointsToAdd} points to user ${user._id}. Old balance=${oldPoints}, New balance=${user.points}`);
+        
+        try {
+          await PointTransaction.create({
+            userId: user._id,
+            amount: pointsToAdd,
+            reason: 'order-completion',
+            notes: `Order ${order.orderNumber}`,
+          });
+          console.log(`[Order] ✅ Point transaction logged for order ${order.orderNumber}`);
+        } catch (err) {
+          console.warn('[Order] Failed to log point transaction for completed order', err);
+        }
+      } else {
+        console.log(`[Order] ⚠️ Points already awarded for order ${order.orderNumber}. Transaction ID: ${existingTransaction._id}`);
       }
     }
 

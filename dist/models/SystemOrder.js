@@ -10,7 +10,7 @@ const SystemOrderItemSchema = new mongoose_1.Schema({
 });
 const SystemOrderSchema = new mongoose_1.Schema({
     orderNumber: { type: String, unique: true, index: true },
-    user: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true },
+    user: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: false }, // Optional for guest orders
     // Distinguish order purpose for clearer filtering in UI/APIs
     orderType: { type: String, enum: ['shop', 'points_topup', 'suggestion_package'], default: 'shop', index: true },
     items: [SystemOrderItemSchema],

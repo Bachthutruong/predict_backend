@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticate } from '../middleware/auth';
+import { optionalAuthenticate } from '../middleware/auth';
 import {
   getCart,
   addToCart,
@@ -12,8 +12,8 @@ import {
 
 const router = express.Router();
 
-// All routes require authentication
-router.use(authenticate);
+// Cart routes work with or without authentication (guest users supported)
+router.use(optionalAuthenticate);
 
 // Cart management routes
 router.get('/', getCart);

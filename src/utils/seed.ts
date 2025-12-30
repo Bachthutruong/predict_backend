@@ -13,6 +13,7 @@ import PointTransaction from '../models/point-transaction';
 import Order from '../models/order';
 import Referral from '../models/referral';
 import SystemSettings from '../models/system-settings';
+import Cart from '../models/Cart';
 import { createVotingTestData } from './voting-seed';
 
 // Create database indexes for better performance
@@ -82,6 +83,44 @@ export const createIndexes = async () => {
     // Referral indexes
     await Referral.collection.createIndex({ referrerId: 1 });
     await Referral.collection.createIndex({ referredId: 1 });
+    
+    // Cart indexes - drop old index if exists and recreate with correct partial filter
+    try {
+      // Drop old user_1 index if it exists
+      await Cart.collection.dropIndex('user_1').catch(() => {
+        // Index might not exist, ignore error
+      });
+      // Drop old guestId_1 index if it exists
+      await Cart.collection.dropIndex('guestId_1').catch(() => {
+        // Index might not exist, ignore error
+      });
+      
+      // Create new indexes with proper partial filter expressions
+      // user_1: unique only when user is ObjectId (not null)
+      await Cart.collection.createIndex(
+        { user: 1 }, 
+        { 
+          unique: true, 
+          sparse: true, 
+          partialFilterExpression: { user: { $type: 'objectId' } },
+          name: 'user_1'
+        }
+      );
+      // guestId_1: unique only when guestId exists and is not empty
+      await Cart.collection.createIndex(
+        { guestId: 1 }, 
+        { 
+          unique: true, 
+          sparse: true, 
+          partialFilterExpression: { guestId: { $exists: true, $type: 'string', $ne: '' } },
+          name: 'guestId_1'
+        }
+      );
+      await Cart.collection.createIndex({ lastUpdated: -1 });
+      console.log('✅ Cart indexes created/recreated successfully!');
+    } catch (error) {
+      console.error('⚠️ Error creating Cart indexes (may already exist):', error);
+    }
     
     // Voting indexes
     await import('../models/voting-campaign').then(async ({ default: VotingCampaign }) => {

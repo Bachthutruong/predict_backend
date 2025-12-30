@@ -50,6 +50,7 @@ const check_in_1 = __importDefault(require("../models/check-in"));
 const point_transaction_1 = __importDefault(require("../models/point-transaction"));
 const order_1 = __importDefault(require("../models/order"));
 const referral_1 = __importDefault(require("../models/referral"));
+const Cart_1 = __importDefault(require("../models/Cart"));
 const voting_seed_1 = require("./voting-seed");
 // Create database indexes for better performance
 const createIndexes = async () => {
@@ -105,6 +106,37 @@ const createIndexes = async () => {
         // Referral indexes
         await referral_1.default.collection.createIndex({ referrerId: 1 });
         await referral_1.default.collection.createIndex({ referredId: 1 });
+        // Cart indexes - drop old index if exists and recreate with correct partial filter
+        try {
+            // Drop old user_1 index if it exists
+            await Cart_1.default.collection.dropIndex('user_1').catch(() => {
+                // Index might not exist, ignore error
+            });
+            // Drop old guestId_1 index if it exists
+            await Cart_1.default.collection.dropIndex('guestId_1').catch(() => {
+                // Index might not exist, ignore error
+            });
+            // Create new indexes with proper partial filter expressions
+            // user_1: unique only when user is ObjectId (not null)
+            await Cart_1.default.collection.createIndex({ user: 1 }, {
+                unique: true,
+                sparse: true,
+                partialFilterExpression: { user: { $type: 'objectId' } },
+                name: 'user_1'
+            });
+            // guestId_1: unique only when guestId exists and is not empty
+            await Cart_1.default.collection.createIndex({ guestId: 1 }, {
+                unique: true,
+                sparse: true,
+                partialFilterExpression: { guestId: { $exists: true, $type: 'string', $ne: '' } },
+                name: 'guestId_1'
+            });
+            await Cart_1.default.collection.createIndex({ lastUpdated: -1 });
+            console.log('✅ Cart indexes created/recreated successfully!');
+        }
+        catch (error) {
+            console.error('⚠️ Error creating Cart indexes (may already exist):', error);
+        }
         // Voting indexes
         await Promise.resolve().then(() => __importStar(require('../models/voting-campaign'))).then(async ({ default: VotingCampaign }) => {
             await VotingCampaign.collection.createIndex({ status: 1, isActive: 1 });

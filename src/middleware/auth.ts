@@ -59,4 +59,36 @@ export const staffMiddleware = (req: AuthRequest, res: Response, next: NextFunct
   }
   
   next();
+};
+
+// Optional authentication - doesn't fail if no token, but sets user if token is valid
+export const optionalAuthenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+        const user = await User.findById(decoded.userId).select('-password');
+        
+        if (user) {
+          req.user = {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            isEmailVerified: user.isEmailVerified
+          };
+        }
+      } catch (error) {
+        // Invalid token, but continue without user
+        console.log('Optional auth: Invalid token, continuing as guest');
+      }
+    }
+    
+    next();
+  } catch (error) {
+    // Continue without authentication
+    next();
+  }
 }; 

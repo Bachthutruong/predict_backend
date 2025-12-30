@@ -89,8 +89,20 @@ app.use((0, cors_1.default)({
         return callback(null, true); // TEMPORARY: Allow all origins
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-WC-Webhook-Signature', 'X-WC-Webhook-Source', 'X-WC-Webhook-Topic', 'X-WC-Webhook-Resource', 'X-WC-Webhook-Event']
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'X-Guest-Id',
+        'X-WC-Webhook-Signature',
+        'X-WC-Webhook-Source',
+        'X-WC-Webhook-Topic',
+        'X-WC-Webhook-Resource',
+        'X-WC-Webhook-Event'
+    ],
+    exposedHeaders: ['Content-Type', 'Authorization', 'X-Guest-Id'],
+    preflightContinue: false,
+    optionsSuccessStatus: 200
 }));
 // Compression middleware
 app.use((0, compression_1.default)());
