@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendVerificationEmail = sendVerificationEmail;
+exports.sendGuestAccountEmail = sendGuestAccountEmail;
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const transporter = nodemailer_1.default.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -15,7 +16,7 @@ const transporter = nodemailer_1.default.createTransport({
     },
 });
 async function sendVerificationEmail(email, token) {
-    const verificationUrl = `${process.env.CLIENT_URL || 'https://predict-frontend-six.vercel.app/'}/verify-email?token=${token}`;
+    const verificationUrl = `${process.env.CLIENT_URL || 'https://predict-frontend-one.vercel.app/'}/verify-email?token=${token}`;
     const mailOptions = {
         from: process.env.SMTP_FROM || 'noreply@predictwin.com',
         to: email,
@@ -43,6 +44,41 @@ async function sendVerificationEmail(email, token) {
     catch (error) {
         console.error('Error sending verification email:', error);
         throw new Error('Failed to send verification email');
+    }
+}
+/** Send email to guest after order: account created with default password */
+async function sendGuestAccountEmail(email, name, tempPassword) {
+    const loginUrl = `${process.env.CLIENT_URL || 'https://predict-frontend-one.vercel.app/'}/login`;
+    const mailOptions = {
+        from: process.env.SMTP_FROM || 'noreply@predictwin.com',
+        to: email,
+        subject: 'Tài khoản của bạn đã được tạo - PredictWin',
+        html: `
+      <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
+        <h1 style="color: #2563eb; text-align: center;">Chào ${name || 'bạn'}!</h1>
+        <p>Bạn vừa đặt hàng thành công. Chúng tôi đã tạo tài khoản cho bạn để bạn có thể theo dõi đơn hàng và sử dụng các tính năng khác.</p>
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
+          <p style="margin: 0 0 8px 0;"><strong>Email đăng nhập:</strong> ${email}</p>
+          <p style="margin: 0;"><strong>Mật khẩu mặc định:</strong> ${tempPassword}</p>
+        </div>
+        <p><strong>Lưu ý bảo mật:</strong> Lần đầu đăng nhập, bạn sẽ được yêu cầu đổi mật khẩu. Vui lòng đổi sang mật khẩu mới để bảo vệ tài khoản.</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${loginUrl}" 
+             style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+            Đăng nhập ngay
+          </a>
+        </div>
+        <p style="color: #666; font-size: 14px;">Nếu bạn không thực hiện đặt hàng này, vui lòng bỏ qua email.</p>
+      </div>
+    `,
+    };
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log('Guest account email sent to:', email);
+    }
+    catch (error) {
+        console.error('Error sending guest account email:', error);
+        throw new Error('Failed to send guest account email');
     }
 }
 //# sourceMappingURL=email.js.map

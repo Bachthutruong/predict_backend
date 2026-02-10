@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.purchasePoints = exports.getUserSuggestionPackages = exports.purchaseSuggestionPackage = exports.cancelOrder = exports.markDelivered = exports.confirmDelivery = exports.submitPaymentConfirmation = exports.createOrder = exports.getOrderById = exports.getUserOrders = void 0;
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const SystemOrder_1 = __importDefault(require("../models/SystemOrder"));
 const Cart_1 = __importDefault(require("../models/Cart"));
 const user_1 = __importDefault(require("../models/user"));
@@ -12,6 +13,7 @@ const Coupon_1 = __importDefault(require("../models/Coupon"));
 const UserSuggestion_1 = __importDefault(require("../models/UserSuggestion"));
 const SuggestionPackage_1 = __importDefault(require("../models/SuggestionPackage"));
 const point_transaction_1 = __importDefault(require("../models/point-transaction"));
+const email_1 = require("../utils/email");
 // Get user's orders
 const getUserOrders = async (req, res) => {
     try {
@@ -62,7 +64,8 @@ const getOrderById = async (req, res) => {
         // For guests, we don't restrict by user (they can view order by ID)
         const order = await SystemOrder_1.default.findOne(query)
             .populate('items.product', 'name images price pointsReward')
-            .populate('coupon', 'code name discountType discountValue');
+            .populate('coupon', 'code name discountType discountValue')
+            .populate('pickupBranch', 'name address phone');
         if (!order) {
             return res.status(404).json({ success: false, message: 'Order not found' });
         }
@@ -96,11 +99,18 @@ const createOrder = async (req, res) => {
             }
         }
         else {
-            // For guests, require shipping address
+            // For guests, require shipping address and email
             if (deliveryMethod === 'shipping' && (!shippingAddress?.street || !shippingAddress?.phone)) {
                 return res.status(400).json({
                     success: false,
                     message: 'Please provide shipping address and phone number'
+                });
+            }
+            const guestEmail = (shippingAddress?.email || '').trim().toLowerCase();
+            if (!guestEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Please provide a valid email address for guest checkout'
                 });
             }
         }
@@ -389,6 +399,67 @@ const createOrder = async (req, res) => {
             pickupBranch: deliveryMethod === 'pickup' ? pickupBranchId : undefined
         });
         await sysOrder.save();
+        // Guest checkout: gán đơn vào tài khoản có email trùng, hoặc tạo tài khoản mới + gửi email
+        if (isGuest && shippingAddress?.email) {
+            const guestEmail = (shippingAddress.email || '').trim().toLowerCase();
+            const defaultPassword = '123456789';
+            let guestUser = await user_1.default.findOne({ email: guestEmail });
+            if (guestUser) {
+                // Email đã tồn tại: thêm đơn vào tài khoản đó, cập nhật thông tin giao hàng từ đơn
+                sysOrder.user = guestUser._id;
+                await sysOrder.save();
+                if (shippingAddress.name || shippingAddress.phone || shippingAddress.street) {
+                    const updates = {};
+                    if ((shippingAddress.name || '').trim())
+                        updates.name = (shippingAddress.name || '').trim();
+                    if ((shippingAddress.phone || '').trim())
+                        updates.phone = (shippingAddress.phone || '').trim();
+                    if (shippingAddress.street || shippingAddress.city || shippingAddress.state || shippingAddress.postalCode || shippingAddress.country) {
+                        updates.address = {
+                            street: (shippingAddress.street || '').trim() || guestUser.address?.street || '',
+                            city: (shippingAddress.city || '').trim() || guestUser.address?.city || '',
+                            state: (shippingAddress.state || '').trim() || guestUser.address?.state || 'VN',
+                            postalCode: (shippingAddress.postalCode || '').trim() || guestUser.address?.postalCode || '10000',
+                            country: (shippingAddress.country || '').trim() || guestUser.address?.country || 'Vietnam'
+                        };
+                    }
+                    if (Object.keys(updates).length > 0) {
+                        await user_1.default.findByIdAndUpdate(guestUser._id, updates);
+                    }
+                }
+            }
+            else {
+                // Email chưa có: tạo tài khoản mới, gửi email mật khẩu mặc định, gán đơn vào tài khoản mới
+                const hashedPassword = await bcryptjs_1.default.hash(defaultPassword, 10);
+                const avatarUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(shippingAddress.name || 'User')}&backgroundColor=4169E1&textColor=ffffff`;
+                guestUser = new user_1.default({
+                    name: (shippingAddress.name || '').trim() || 'Customer',
+                    email: guestEmail,
+                    password: hashedPassword,
+                    avatarUrl,
+                    phone: (shippingAddress.phone || '').trim() || '',
+                    address: {
+                        street: (shippingAddress.street || '').trim() || '',
+                        city: (shippingAddress.city || '').trim() || '',
+                        state: (shippingAddress.state || '').trim() || 'VN',
+                        postalCode: (shippingAddress.postalCode || '').trim() || '10000',
+                        country: (shippingAddress.country || '').trim() || 'Vietnam'
+                    },
+                    isAutoCreated: true,
+                    isEmailVerified: true, // Đã gửi email tài khoản đến địa chỉ này, coi như đã xác thực để lần đăng nhập sau không bị bắt verify
+                    points: 0
+                });
+                await guestUser.save();
+                sysOrder.user = guestUser._id;
+                await sysOrder.save();
+                try {
+                    await (0, email_1.sendGuestAccountEmail)(guestEmail, guestUser.name, defaultPassword);
+                }
+                catch (emailErr) {
+                    console.error('[Order] Failed to send guest account email:', emailErr);
+                }
+            }
+        }
         // Update product stock (only for selected items)
         for (const item of itemsToProcess) {
             const product = item.product;
@@ -425,16 +496,19 @@ const createOrder = async (req, res) => {
     }
 };
 exports.createOrder = createOrder;
-// Submit payment confirmation
+// Submit payment confirmation (cho phép cả guest gửi minh chứng cho đơn của mình)
 const submitPaymentConfirmation = async (req, res) => {
     try {
         const { orderId, paymentImage, note } = req.body; // paymentImage should be Cloudinary URL
-        const order = await SystemOrder_1.default.findOne({
-            _id: orderId,
-            user: req.user?.id
-        });
+        const order = await SystemOrder_1.default.findOne({ _id: orderId });
         if (!order) {
             return res.status(404).json({ success: false, message: 'Order not found' });
+        }
+        // User đăng nhập: chỉ được gửi cho đơn của mình. Guest (không đăng nhập): cho phép gửi nếu có orderId (từ link đơn hàng)
+        if (req.user?.id) {
+            if (order.user && order.user.toString() !== req.user.id) {
+                return res.status(403).json({ success: false, message: 'Not allowed to update this order' });
+            }
         }
         if (order.paymentMethod !== 'bank_transfer') {
             return res.status(400).json({
@@ -567,7 +641,7 @@ exports.markDelivered = markDelivered;
 // Cancel order
 const cancelOrder = async (req, res) => {
     try {
-        const { orderId } = req.params;
+        const orderId = req.params.id; // Route is POST /:id/cancel
         const { reason } = req.body;
         const order = await SystemOrder_1.default.findOne({
             _id: orderId,

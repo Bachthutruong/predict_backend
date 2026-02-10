@@ -5,13 +5,14 @@ import Product from '../models/Product';
 import Coupon from '../models/Coupon';
 
 // Helper to get cart identifier (user ID or guestId)
+// Accept guestId from header, body, or query (query helps when custom headers are stripped by proxy/CORS)
 const getCartIdentifier = (req: AuthRequest) => {
   if (req.user?.id) {
     return { user: req.user.id };
   }
-  const guestId = req.header('X-Guest-Id') || req.body.guestId;
-  if (guestId) {
-    return { guestId };
+  const guestId = req.header('X-Guest-Id') || (req.body && req.body.guestId) || (req.query && (req.query.guestId as string));
+  if (guestId && String(guestId).trim()) {
+    return { guestId: String(guestId).trim() };
   }
   return null;
 };

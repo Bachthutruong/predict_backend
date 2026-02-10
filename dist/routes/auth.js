@@ -106,6 +106,16 @@ router.post('/login', async (req, res) => {
                 message: 'Invalid credentials'
             });
         }
+        // Require email verification only for non auto-created accounts
+        if (!user.isAutoCreated && !user.isEmailVerified) {
+            return res.status(400).json({
+                success: false,
+                message: 'Please verify your email address before logging in. Check your email for the verification link.'
+            });
+        }
+        // Update last login
+        user.lastLogin = new Date();
+        await user.save();
         // Generate JWT token
         const token = jsonwebtoken_1.default.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
         res.json({
@@ -119,7 +129,9 @@ router.post('/login', async (req, res) => {
                     role: user.role,
                     points: user.points,
                     avatarUrl: user.avatarUrl,
-                    isEmailVerified: user.isEmailVerified
+                    isEmailVerified: user.isEmailVerified,
+                    isAutoCreated: !!user.isAutoCreated,
+                    mustChangePassword: !!user.isAutoCreated
                 }
             },
             message: 'Login successful'

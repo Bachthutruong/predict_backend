@@ -12,12 +12,13 @@ const router = express_1.default.Router();
 router.post('/', auth_1.optionalAuthenticate, order_controller_1.createOrder);
 // Get order by ID allows guest access (optional auth)
 router.get('/:id', auth_1.optionalAuthenticate, order_controller_1.getOrderById);
+// Guest có thể gửi xác nhận thanh toán (ảnh biên lai) cho đơn của mình qua link đơn hàng
+router.post('/payment-confirmation', auth_1.optionalAuthenticate, order_controller_1.submitPaymentConfirmation);
 // All other routes require authentication
 router.use(auth_1.authenticate);
 // Order management routes
 router.get('/', order_controller_1.getUserOrders);
 router.get('/suggestion-packages', order_controller_1.getUserSuggestionPackages);
-router.post('/payment-confirmation', order_controller_1.submitPaymentConfirmation);
 router.post('/:id/confirm-delivery', order_controller_1.confirmDelivery);
 router.post('/:id/mark-delivered', order_controller_1.markDelivered);
 router.post('/:id/cancel', order_controller_1.cancelOrder);

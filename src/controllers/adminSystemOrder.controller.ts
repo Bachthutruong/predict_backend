@@ -257,6 +257,17 @@ export const updateSystemOrderStatus = async (req: AuthRequest, res: Response) =
     if (status === 'cancelled') {
       order.cancelledAt = new Date();
       
+      // Refund product stock so inventory returns to pre-order level
+      for (const item of order.items) {
+        const productId = (item as any).product?._id ?? (item as any).product;
+        if (productId) {
+          await Product.findByIdAndUpdate(
+            productId,
+            { $inc: { stock: Number((item as any).quantity) || 0, purchaseCount: -Number((item as any).quantity) || 0 } }
+          );
+        }
+      }
+      
       // If order was previously completed, revoke awarded points
       if (oldStatus === 'completed' && order.pointsEarned > 0) {
         try {

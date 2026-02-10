@@ -55,7 +55,7 @@ app.use(helmet({
 
 // CORS configuration
 const allowedOrigins = [
-  'https://predict-frontend-six.vercel.app',
+  'https://predict-frontend-one.vercel.app',
   'http://localhost:3000',
   'http://localhost:5173'
 ];

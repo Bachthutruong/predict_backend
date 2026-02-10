@@ -1,6 +1,6 @@
 import express from 'express';
 import { v2 as cloudinary } from 'cloudinary';
-import { authenticate } from '../middleware/auth';
+import { optionalAuthenticate } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -11,8 +11,8 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Generate signature for signed upload
-router.post('/signature', authenticate, async (req, res) => {
+// Generate signature for signed upload (cho phép cả guest để upload ảnh minh chứng chuyển khoản, v.v.)
+router.post('/signature', optionalAuthenticate, async (req, res) => {
   try {
     const { timestamp, folder = 'predict-win' } = req.body;
 

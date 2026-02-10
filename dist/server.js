@@ -54,7 +54,7 @@ app.use((0, helmet_1.default)({
 // app.set('trust proxy', 1); // TEMPORARILY DISABLED while debugging
 // CORS configuration
 const allowedOrigins = [
-    'https://predict-frontend-six.vercel.app',
+    'https://predict-frontend-one.vercel.app',
     'http://localhost:3000',
     'http://localhost:5173'
 ];

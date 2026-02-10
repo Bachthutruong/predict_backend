@@ -13,8 +13,8 @@ cloudinary_1.v2.config({
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET,
 });
-// Generate signature for signed upload
-router.post('/signature', auth_1.authenticate, async (req, res) => {
+// Generate signature for signed upload (cho phép cả guest để upload ảnh minh chứng chuyển khoản, v.v.)
+router.post('/signature', auth_1.optionalAuthenticate, async (req, res) => {
     try {
         const { timestamp, folder = 'predict-win' } = req.body;
         // Parameters for upload

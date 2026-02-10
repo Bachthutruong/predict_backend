@@ -8,6 +8,7 @@ const SystemOrder_1 = __importDefault(require("../models/SystemOrder"));
 const Coupon_1 = __importDefault(require("../models/Coupon"));
 const user_1 = __importDefault(require("../models/user"));
 const point_transaction_1 = __importDefault(require("../models/point-transaction"));
+const Product_1 = __importDefault(require("../models/Product"));
 const listSystemOrders = async (req, res) => {
     try {
         const { page = 1, limit = 10, status = '', paymentStatus = '', search = '', sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
@@ -255,6 +256,13 @@ const updateSystemOrderStatus = async (req, res) => {
         }
         if (status === 'cancelled') {
             order.cancelledAt = new Date();
+            // Refund product stock so inventory returns to pre-order level
+            for (const item of order.items) {
+                const productId = item.product?._id ?? item.product;
+                if (productId) {
+                    await Product_1.default.findByIdAndUpdate(productId, { $inc: { stock: Number(item.quantity) || 0, purchaseCount: -Number(item.quantity) || 0 } });
+                }
+            }
             // If order was previously completed, revoke awarded points
             if (oldStatus === 'completed' && order.pointsEarned > 0) {
                 try {
