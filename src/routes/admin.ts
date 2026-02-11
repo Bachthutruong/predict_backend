@@ -8,8 +8,10 @@ import Question from '../models/question';
 import PointTransaction from '../models/point-transaction';
 import UserPrediction from '../models/user-prediction';
 import Order from '../models/order';
-import { encrypt } from '../utils/encryption';
+import Product from '../models/Product';
+import InventoryLog from '../models/InventoryLog';
 import { clearCache } from '../utils/cache';
+import { encrypt } from '../utils/encryption';
 
 const router = express.Router();
 
@@ -80,18 +82,20 @@ router.get('/dashboard-stats', async (req, res) => {
   }
 });
 
-// Create prediction
+// Create prediction (Dự đoán trúng thưởng - merged with contest)
 router.post('/predictions', authenticate, async (req: AuthRequest, res) => {
   try {
     const { title, description, imageUrl, correctAnswer } = req.body;
-    // Coerce numeric fields from body (can arrive as strings)
     const pointsCost = Number(req.body.pointsCost);
     const rewardPointsInput = req.body.rewardPoints;
     const rewardPoints = Number(rewardPointsInput);
+    const startDate = req.body.startDate ? new Date(req.body.startDate) : null;
+    const endDate = req.body.endDate ? new Date(req.body.endDate) : null;
+    const maxWinners = Number(req.body.maxWinners) || 1;
+    const maxAttemptsPerUser = Number(req.body.maxAttemptsPerUser) || 999;
+    const rewards = req.body.rewards || [];
 
-    // Encrypt the answer before storing
-    const encryptedAnswer = encrypt(correctAnswer);
-
+    const encryptedAnswer = encrypt(String(correctAnswer ?? '').trim());
     const prediction = new Prediction({
       title,
       description,
@@ -101,7 +105,12 @@ router.post('/predictions', authenticate, async (req: AuthRequest, res) => {
       rewardPoints: !isNaN(rewardPoints) && rewardPoints > 0
         ? rewardPoints
         : Math.round((isNaN(pointsCost) ? 0 : pointsCost) * 1.5),
-      authorId: req.user!.id
+      authorId: req.user!.id,
+      startDate,
+      endDate,
+      maxWinners,
+      maxAttemptsPerUser,
+      rewards: Array.isArray(rewards) ? rewards : []
     });
 
     await prediction.save();
@@ -113,8 +122,7 @@ router.post('/predictions', authenticate, async (req: AuthRequest, res) => {
     // Only show decrypted answer to the author
     const transformedPrediction = {
       ...prediction.toObject(),
-      id: prediction._id.toString(), // Ensure ID is properly set
-      // For admin (author) who just created, return decrypted answer in both fields
+      id: prediction._id.toString(),
       answer: prediction.getDecryptedAnswer(),
       correctAnswer: prediction.getDecryptedAnswer(),
       rewardPoints: prediction.rewardPoints
@@ -209,15 +217,24 @@ router.get('/predictions/:id', checkPredictionViewAccess as any, authenticate, a
       };
     });
 
+    const predWithPopulate = await Prediction.findById(id)
+      .populate({ path: 'rewards.productId', model: 'Product', select: 'name images stock' });
+    const predObj = (predWithPopulate || prediction).toObject() as any;
     const predictionWithStats = {
-      ...prediction.toObject(),
-      id: prediction._id.toString(), // Ensure ID is properly set
+      ...predObj,
+      id: prediction._id.toString(),
       answer: canViewAnswer ? prediction.getDecryptedAnswer() : '***ENCRYPTED***',
       correctAnswer: canViewAnswer ? prediction.getDecryptedAnswer() : '***ENCRYPTED***',
       totalPredictions,
       correctPredictions,
       totalPointsAwarded,
-      userPredictions: transformedUserPredictions
+      userPredictions: transformedUserPredictions,
+      isAnswerPublished: predObj.isAnswerPublished ?? false,
+      maxWinners: predObj.maxWinners ?? 1,
+      startDate: predObj.startDate,
+      endDate: predObj.endDate,
+      maxAttemptsPerUser: predObj.maxAttemptsPerUser ?? 999,
+      rewards: predObj.rewards || []
     };
 
     res.json({
@@ -240,21 +257,27 @@ router.put('/predictions/:id', checkPredictionAuthor as any, authenticate, async
     const { title, description, imageUrl, correctAnswer, status } = req.body;
     const pointsCost = Number(req.body.pointsCost);
     const rewardPointsBody = Number(req.body.rewardPoints);
+    const startDate = req.body.startDate ? new Date(req.body.startDate) : null;
+    const endDate = req.body.endDate ? new Date(req.body.endDate) : null;
+    const maxWinners = Number(req.body.maxWinners) ?? 1;
+    const maxAttemptsPerUser = Number(req.body.maxAttemptsPerUser) ?? 999;
+    const rewards = req.body.rewards || [];
     const prediction = req.prediction!;
 
-    // Encrypt the answer before storing
-    const encryptedAnswer = encrypt(correctAnswer);
-
-    // Update prediction fields
     prediction.title = title;
     prediction.description = description;
     prediction.imageUrl = imageUrl;
-    prediction.answer = encryptedAnswer;
+    prediction.answer = encrypt(String(correctAnswer ?? '').trim());
     prediction.pointsCost = isNaN(pointsCost) ? prediction.pointsCost : pointsCost;
     prediction.rewardPoints = !isNaN(rewardPointsBody) && rewardPointsBody > 0
       ? rewardPointsBody
       : Math.round((isNaN(pointsCost) ? prediction.pointsCost : pointsCost) * 1.5);
     prediction.status = status;
+    (prediction as any).startDate = startDate;
+    (prediction as any).endDate = endDate;
+    (prediction as any).maxWinners = maxWinners;
+    (prediction as any).maxAttemptsPerUser = maxAttemptsPerUser;
+    (prediction as any).rewards = Array.isArray(rewards) ? rewards : [];
 
     await prediction.save();
 
@@ -265,8 +288,7 @@ router.put('/predictions/:id', checkPredictionAuthor as any, authenticate, async
     // Only show decrypted answer to the author
     const transformedPrediction = {
       ...prediction.toObject(),
-      id: prediction._id.toString(), // Ensure ID is properly set
-      // For author, keep decrypted answer in both fields
+      id: prediction._id.toString(),
       answer: prediction.getDecryptedAnswer(),
       correctAnswer: prediction.getDecryptedAnswer(),
       rewardPoints: prediction.rewardPoints

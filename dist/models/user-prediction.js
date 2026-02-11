@@ -5,8 +5,9 @@ const UserPredictionSchema = new mongoose_1.Schema({
     userId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true },
     predictionId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Prediction', required: true },
     guess: { type: String, required: true },
-    isCorrect: { type: Boolean, default: false },
+    isCorrect: { type: Boolean, default: false }, // Chỉ set true khi admin publish answer - user không biết cho đến lúc đó
     pointsSpent: { type: Number, required: true },
+    rewardPointsEarned: { type: Number, default: 0 },
 }, { timestamps: true });
 // Add indexes for better performance
 UserPredictionSchema.index({ predictionId: 1, createdAt: -1 }); // For prediction details query

@@ -14,25 +14,62 @@ export const getActiveVotingCampaigns = async (req: Request, res: Response) => {
     const limitNum = parseInt(limit as string);
     const skip = (pageNum - 1) * limitNum;
 
-    // Build filter for campaigns
+    const now = new Date();
+
+    // Build filter for campaigns using time-based logic
+    // Since DB status is not auto-updated when campaigns expire,
+    // we use date comparisons to determine the actual state
     let filter: any = {
       isActive: true
     };
 
-    // Filter by status if provided
     if (status && status !== 'all') {
-      filter.status = status;
+      if (status === 'active') {
+        // Active = not cancelled, startDate <= now, endDate >= now
+        filter.status = { $ne: 'cancelled' };
+        filter.startDate = { $lte: now };
+        filter.endDate = { $gte: now };
+      } else if (status === 'finished') {
+        // Finished = endDate has passed OR status is 'completed'/'closed'
+        filter.$or = [
+          { endDate: { $lt: now }, status: { $ne: 'cancelled' } },
+          { status: { $in: ['completed', 'closed'] } }
+        ];
+      } else if (status === 'upcoming') {
+        // Upcoming = startDate > now, not cancelled
+        filter.status = { $ne: 'cancelled' };
+        filter.startDate = { $gt: now };
+      } else {
+        filter.status = status;
+      }
     } else {
-      // If no status filter, exclude cancelled campaigns
-      filter.status = { $ne: 'cancelled' };
+      // If no status filter, exclude cancelled and draft campaigns
+      filter.status = { $nin: ['cancelled', 'draft'] };
     }
 
     if (search) {
-      filter.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
-      ];
+      // If we already used $or for status, we need to use $and
+      const searchCondition = {
+        $or: [
+          { title: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } }
+        ]
+      };
+      if (filter.$or) {
+        // Wrap existing $or and search $or in $and
+        const existingOr = filter.$or;
+        delete filter.$or;
+        filter.$and = [
+          { $or: existingOr },
+          searchCondition
+        ];
+      } else {
+        filter.$or = searchCondition.$or;
+      }
     }
+
+    // Get total count for pagination BEFORE skip/limit
+    const total = await VotingCampaign.countDocuments(filter);
 
     const campaigns = await VotingCampaign.find(filter)
       .populate('createdBy', 'name')
@@ -55,7 +92,6 @@ export const getActiveVotingCampaigns = async (req: Request, res: Response) => {
 
         // Tính trạng thái động dựa trên thời gian
         let dynamicStatus = campaign.status;
-        const now = new Date();
         if (campaign.status !== 'cancelled') {
           if (now < campaign.startDate) {
             dynamicStatus = 'upcoming';
@@ -68,7 +104,7 @@ export const getActiveVotingCampaigns = async (req: Request, res: Response) => {
 
         return {
           ...campaign.toJSON(),
-          status: dynamicStatus, // Ghi đè status với trạng thái động
+          status: dynamicStatus,
           entryCount,
           totalVotes,
           isVotingOpen: campaign.isVotingOpen(),
@@ -78,17 +114,9 @@ export const getActiveVotingCampaigns = async (req: Request, res: Response) => {
       })
     );
 
-    // Filter campaigns by dynamic status if status parameter is provided
-    let filteredCampaigns = campaignsWithStats;
-    if (status && status !== 'all') {
-      filteredCampaigns = campaignsWithStats.filter(campaign => campaign.status === status);
-    }
-
-    const total = filteredCampaigns.length;
-
     res.json({
       success: true,
-      data: filteredCampaigns,
+      data: campaignsWithStats,
       pagination: {
         page: pageNum,
         limit: limitNum,

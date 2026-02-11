@@ -5,6 +5,8 @@ interface IVoteEntry extends Document {
   title: string;
   description: string;
   imageUrl?: string;
+  imageUrls?: string[]; // Multiple images for gallery
+  videoUrl?: string; // YouTube or any video link
   submittedBy: mongoose.Types.ObjectId; // user who submitted this entry
   voteCount: number;
   status: 'pending' | 'approved' | 'rejected';
@@ -36,6 +38,14 @@ const VoteEntrySchema = new Schema({
     maxlength: 2000
   },
   imageUrl: {
+    type: String,
+    default: ''
+  },
+  imageUrls: {
+    type: [String],
+    default: []
+  },
+  videoUrl: {
     type: String,
     default: ''
   },

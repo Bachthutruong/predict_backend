@@ -13,17 +13,52 @@ export const getVotingCampaigns = async (req: Request, res: Response) => {
     const limitNum = parseInt(limit as string);
     const skip = (pageNum - 1) * limitNum;
 
-    // Build filter
+    const now = new Date();
+
+    // Build filter using time-based logic for accurate status filtering
     let filter: any = {};
     if (status && status !== 'all') {
-      filter.status = status;
+      if (status === 'active') {
+        // Active = not cancelled, currently within start/end date range
+        filter.status = { $ne: 'cancelled' };
+        filter.startDate = { $lte: now };
+        filter.endDate = { $gte: now };
+      } else if (status === 'completed' || status === 'closed') {
+        // Completed/Closed = endDate has passed OR explicitly marked as completed/closed
+        filter.$or = [
+          { endDate: { $lt: now }, status: { $ne: 'cancelled' } },
+          { status: { $in: ['completed', 'closed'] } }
+        ];
+      } else if (status === 'upcoming') {
+        // Upcoming = startDate > now, not cancelled
+        filter.status = { $ne: 'cancelled' };
+        filter.startDate = { $gt: now };
+      } else {
+        // For 'draft', 'cancelled' etc. - use direct DB status
+        filter.status = status;
+      }
     }
+
     if (search) {
-      filter.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
-      ];
+      const searchCondition = {
+        $or: [
+          { title: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } }
+        ]
+      };
+      if (filter.$or) {
+        const existingOr = filter.$or;
+        delete filter.$or;
+        filter.$and = [
+          { $or: existingOr },
+          searchCondition
+        ];
+      } else {
+        filter.$or = searchCondition.$or;
+      }
     }
+
+    const total = await VotingCampaign.countDocuments(filter);
 
     const campaigns = await VotingCampaign.find(filter)
       .populate('createdBy', 'name email')
@@ -44,7 +79,6 @@ export const getVotingCampaigns = async (req: Request, res: Response) => {
 
         // Tính trạng thái động
         let dynamicStatus = campaign.status;
-        const now = new Date();
         if (campaign.status !== 'cancelled') {
           if (now < campaign.startDate) {
             dynamicStatus = 'upcoming';
@@ -62,8 +96,6 @@ export const getVotingCampaigns = async (req: Request, res: Response) => {
         };
       })
     );
-
-    const total = await VotingCampaign.countDocuments(filter);
 
     res.json({
       success: true,
@@ -375,7 +407,7 @@ export const deleteVotingCampaign = async (req: Request, res: Response) => {
 export const addVoteEntry = async (req: Request, res: Response) => {
   try {
     const { campaignId } = req.params;
-    const { title, description, imageUrl } = req.body;
+    const { title, description, imageUrl, imageUrls, videoUrl } = req.body;
     const userId = (req as any).user.id;
 
     if (!mongoose.Types.ObjectId.isValid(campaignId)) {
@@ -405,6 +437,8 @@ export const addVoteEntry = async (req: Request, res: Response) => {
       title,
       description,
       imageUrl: imageUrl || '',
+      imageUrls: imageUrls || [],
+      videoUrl: videoUrl || '',
       submittedBy: userId
     });
 

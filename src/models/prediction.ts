@@ -1,6 +1,14 @@
 import mongoose, { Schema, models, model, Document } from 'mongoose';
 import { decrypt, isEncrypted } from '../utils/encryption';
 
+// Reward can be points or product
+const RewardItemSchema = new Schema({
+  type: { type: String, enum: ['points', 'product'], required: true },
+  pointsAmount: { type: Number, default: 0 },
+  productId: { type: Schema.Types.ObjectId, ref: 'Product' },
+  productQuantity: { type: Number, default: 1 },
+}, { _id: false });
+
 const PredictionSchema = new Schema({
   title: { type: String, required: true },
   description: { type: String, required: true },
@@ -12,6 +20,14 @@ const PredictionSchema = new Schema({
   status: { type: String, enum: ['active', 'finished'], default: 'active' },
   authorId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   winnerId: { type: Schema.Types.ObjectId, ref: 'User' },
+  winnerIds: [{ type: Schema.Types.ObjectId, ref: 'User' }], // Nhiều người trúng
+  // New fields: Dự đoán trúng thưởng (merged with contest)
+  startDate: { type: Date, default: null }, // null = no limit, always ongoing
+  endDate: { type: Date, default: null }, // null = no limit
+  maxWinners: { type: Number, default: 1 }, // Số lượng người trúng thưởng tối đa
+  maxAttemptsPerUser: { type: Number, default: 999 }, // Số lần dự đoán mỗi người (999 = unlimited)
+  isAnswerPublished: { type: Boolean, default: false }, // Đáp án đã công bố chưa (user mới biết đúng/sai)
+  rewards: [RewardItemSchema], // Phần thưởng: xu + sản phẩm (mặc định dùng rewardPoints nếu empty)
 }, { timestamps: true });
 
 // Add indexes for better performance
@@ -39,6 +55,14 @@ PredictionSchema.set('toJSON', {
   },
 });
 
+// Interface for reward item
+export interface IRewardItem {
+  type: 'points' | 'product';
+  pointsAmount?: number;
+  productId?: mongoose.Types.ObjectId;
+  productQuantity?: number;
+}
+
 // Interface for the prediction document
 interface IPrediction extends Document {
   title: string;
@@ -51,25 +75,25 @@ interface IPrediction extends Document {
   status: 'active' | 'finished';
   authorId: mongoose.Types.ObjectId;
   winnerId?: mongoose.Types.ObjectId;
+  startDate?: Date | null;
+  endDate?: Date | null;
+  maxWinners: number;
+  maxAttemptsPerUser: number;
+  isAnswerPublished: boolean;
+  rewards?: IRewardItem[];
   createdAt: Date;
   updatedAt: Date;
   
-  // Method to get decrypted answer (only for author)
   getDecryptedAnswer(): string;
-  // Method to check if user is author
   isAuthor(userId: string): boolean;
 }
 
-// Add instance methods
 PredictionSchema.methods.getDecryptedAnswer = function(): string {
   try {
-    if (isEncrypted(this.answer)) {
-      return decrypt(this.answer);
-    }
+    if (isEncrypted(this.answer)) return decrypt(this.answer);
     return this.answer;
-  } catch (error) {
-    console.error('Error decrypting answer:', error);
-    return 'Error decrypting answer';
+  } catch {
+    return '';
   }
 };
 

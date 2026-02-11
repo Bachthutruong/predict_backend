@@ -1,8 +1,17 @@
 import crypto from 'crypto';
 
-// Encryption key - in production, this should be stored in environment variables
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'your-32-character-secret-key-here!';
+// Encryption key - trim để tránh space thừa từ .env (ENCRYPTION_KEY= xxx)
+const ENCRYPTION_KEY = (process.env.ENCRYPTION_KEY || 'your-32-character-secret-key-here!').trim();
 const ALGORITHM = 'aes-256-cbc';
+
+// 64 hex chars = 32 bytes; nếu key đúng format thì decode hex
+function getKeyBuffer(): Buffer {
+  const k = ENCRYPTION_KEY;
+  if (/^[0-9a-fA-F]{64}$/.test(k)) {
+    return Buffer.from(k, 'hex');
+  }
+  return Buffer.from(k.padEnd(32, '0').slice(0, 32), 'utf8');
+}
 
 /**
  * Encrypts a text string using AES-256-CBC
@@ -12,7 +21,7 @@ const ALGORITHM = 'aes-256-cbc';
 export function encrypt(text: string): string {
   try {
     const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv(ALGORITHM, Buffer.from(ENCRYPTION_KEY.padEnd(32, '0').slice(0, 32)), iv);
+    const cipher = crypto.createCipheriv(ALGORITHM, getKeyBuffer(), iv);
     
     let encrypted = cipher.update(text, 'utf8', 'hex');
     encrypted += cipher.final('hex');
@@ -39,13 +48,13 @@ export function decrypt(encryptedText: string): string {
     const iv = Buffer.from(textParts[0], 'hex');
     const encryptedData = textParts[1];
     
-    const decipher = crypto.createDecipheriv(ALGORITHM, Buffer.from(ENCRYPTION_KEY.padEnd(32, '0').slice(0, 32)), iv);
+    const decipher = crypto.createDecipheriv(ALGORITHM, getKeyBuffer(), iv);
     let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
     
     return decrypted;
   } catch (error) {
-    console.error('Decryption error:', error);
+    // Không log - một số prediction mã hóa bằng key khác (deploy/env khác)
     throw new Error('Failed to decrypt data');
   }
 }

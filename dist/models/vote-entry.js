@@ -25,6 +25,14 @@ const VoteEntrySchema = new mongoose_1.Schema({
         type: String,
         default: ''
     },
+    imageUrls: {
+        type: [String],
+        default: []
+    },
+    videoUrl: {
+        type: String,
+        default: ''
+    },
     submittedBy: {
         type: mongoose_1.Schema.Types.ObjectId,
         ref: 'User',
