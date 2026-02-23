@@ -7,6 +7,7 @@ const SystemOrderItemSchema = new mongoose_1.Schema({
     image: { type: String, default: '' },
     quantity: { type: Number, required: true, min: 1 },
     price: { type: Number, required: true, min: 0 },
+    isGift: { type: Boolean, default: false, index: true },
 });
 const SystemOrderSchema = new mongoose_1.Schema({
     orderNumber: { type: String, unique: true, index: true },

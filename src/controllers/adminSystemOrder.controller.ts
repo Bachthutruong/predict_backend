@@ -157,6 +157,12 @@ export const updateSystemOrderStatus = async (req: AuthRequest, res: Response) =
     }
     
     const oldStatus = order.status;
+    if (oldStatus === 'cancelled' && status && status !== 'cancelled') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cancelled orders cannot be moved back to other statuses'
+      });
+    }
     order.status = status || order.status; 
     if (adminNotes) order.adminNotes = adminNotes;
     
@@ -254,7 +260,7 @@ export const updateSystemOrderStatus = async (req: AuthRequest, res: Response) =
       }
     }
     
-    if (status === 'cancelled') {
+    if (status === 'cancelled' && oldStatus !== 'cancelled') {
       order.cancelledAt = new Date();
       
       // Refund product stock so inventory returns to pre-order level
@@ -263,7 +269,12 @@ export const updateSystemOrderStatus = async (req: AuthRequest, res: Response) =
         if (productId) {
           await Product.findByIdAndUpdate(
             productId,
-            { $inc: { stock: Number((item as any).quantity) || 0, purchaseCount: -Number((item as any).quantity) || 0 } }
+            {
+              $inc: {
+                stock: Number((item as any).quantity) || 0,
+                purchaseCount: -(Number((item as any).quantity) || 0)
+              }
+            }
           );
         }
       }

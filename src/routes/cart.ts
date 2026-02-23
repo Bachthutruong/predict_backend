@@ -7,7 +7,8 @@ import {
   removeFromCart,
   clearCart,
   applyCoupon,
-  removeCoupon
+  removeCoupon,
+  selectGifts
 } from '../controllers/cart.controller';
 
 const router = express.Router();
@@ -23,5 +24,6 @@ router.delete('/items/:itemId', removeFromCart);
 router.delete('/clear', clearCart);
 router.post('/apply-coupon', applyCoupon);
 router.delete('/remove-coupon', removeCoupon);
+router.post('/select-gifts', selectGifts);
 
 export default router;

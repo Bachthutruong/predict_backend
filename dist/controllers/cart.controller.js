@@ -3,10 +3,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.removeCoupon = exports.applyCoupon = exports.clearCart = exports.removeFromCart = exports.updateCartItem = exports.addToCart = exports.getCart = void 0;
+exports.selectGifts = exports.removeCoupon = exports.applyCoupon = exports.clearCart = exports.removeFromCart = exports.updateCartItem = exports.addToCart = exports.getCart = void 0;
 const Cart_1 = __importDefault(require("../models/Cart"));
 const Product_1 = __importDefault(require("../models/Product"));
 const Coupon_1 = __importDefault(require("../models/Coupon"));
+const GiftCampaign_1 = __importDefault(require("../models/GiftCampaign"));
 // Helper to get cart identifier (user ID or guestId)
 // Accept guestId from header, body, or query (query helps when custom headers are stripped by proxy/CORS)
 const getCartIdentifier = (req) => {
@@ -19,6 +20,76 @@ const getCartIdentifier = (req) => {
     }
     return null;
 };
+const computeEligibleGiftCampaigns = async (cart, sourceItems) => {
+    const items = Array.isArray(sourceItems) ? sourceItems : cart?.items;
+    if (!cart || !items || items.length === 0)
+        return [];
+    const campaigns = await GiftCampaign_1.default.find({ isActive: true }).populate('giftProducts', 'name images isActive stock');
+    const eligible = [];
+    for (const campaign of campaigns) {
+        const triggerProductIds = (campaign.triggerProducts || []).map((id) => id.toString());
+        const relatedItems = triggerProductIds.length > 0
+            ? items.filter((item) => {
+                const itemProductId = item?.product?._id?.toString?.() || item?.product?.toString?.() || '';
+                return triggerProductIds.includes(itemProductId);
+            })
+            : items;
+        const totalQuantity = relatedItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+        if (totalQuantity < campaign.requiredQuantity)
+            continue;
+        const giftProducts = (campaign.giftProducts || []).filter((item) => item?.isActive && Number(item?.stock || 0) > 0);
+        if (giftProducts.length === 0)
+            continue;
+        eligible.push({
+            campaignId: campaign._id.toString(),
+            name: campaign.name,
+            description: campaign.description || '',
+            requiredQuantity: campaign.requiredQuantity,
+            allowMultiSelect: campaign.allowMultiSelect,
+            maxSelectableGifts: campaign.maxSelectableGifts,
+            giftProducts
+        });
+    }
+    return eligible;
+};
+const sanitizeSelectedGifts = (selectedGifts, eligible) => {
+    if (!Array.isArray(selectedGifts) || selectedGifts.length === 0)
+        return [];
+    const eligibleByCampaign = new Map(eligible.map((item) => [item.campaignId, item]));
+    const grouped = new Map();
+    for (const gift of selectedGifts) {
+        const campaignId = gift?.campaign?.toString?.() || gift?.campaign?.toString?.() || '';
+        if (!campaignId || !eligibleByCampaign.has(campaignId))
+            continue;
+        if (!grouped.has(campaignId))
+            grouped.set(campaignId, []);
+        grouped.get(campaignId)?.push(gift);
+    }
+    const normalized = [];
+    grouped.forEach((items, campaignId) => {
+        const campaign = eligibleByCampaign.get(campaignId);
+        if (!campaign)
+            return;
+        const allowedGiftProductIds = new Set(campaign.giftProducts.map((p) => p._id.toString()));
+        const cap = campaign.allowMultiSelect ? campaign.maxSelectableGifts : 1;
+        let added = 0;
+        for (const item of items) {
+            if (added >= cap)
+                break;
+            const productId = item?.product?._id?.toString?.() || item?.product?.toString?.() || '';
+            if (!productId || !allowedGiftProductIds.has(productId))
+                continue;
+            normalized.push({
+                campaign: campaignId,
+                product: productId,
+                quantity: 1,
+                selectedAt: item.selectedAt || new Date()
+            });
+            added += 1;
+        }
+    });
+    return normalized;
+};
 // Get user's or guest's cart
 const getCart = async (req, res) => {
     try {
@@ -28,9 +99,47 @@ const getCart = async (req, res) => {
         }
         const cart = await Cart_1.default.findOne(identifier)
             .populate('items.product', 'name images price originalPrice stock pointsReward')
-            .populate('coupon', 'code name discountType discountValue pointsBonus');
+            .populate('coupon', 'code name discountType discountValue pointsBonus')
+            .populate('selectedGifts.product', 'name images price');
         if (!cart) {
             return res.json({ success: true, data: { items: [], total: 0, subtotal: 0, discount: 0 } });
+        }
+        const selectedItemIdsQuery = String(req.query?.selectedItemIds || '').trim();
+        const selectedItemIdSet = new Set(selectedItemIdsQuery
+            .split(',')
+            .map((id) => id.trim())
+            .filter(Boolean));
+        const usingSelectedSubset = selectedItemIdSet.size > 0;
+        const itemsForEligibility = usingSelectedSubset
+            ? cart.items.filter((item) => selectedItemIdSet.has(item?._id?.toString?.() || ''))
+            : cart.items;
+        const eligibleGiftCampaigns = await computeEligibleGiftCampaigns(cart, itemsForEligibility);
+        const normalizedGifts = sanitizeSelectedGifts(cart.selectedGifts || [], eligibleGiftCampaigns);
+        let responseSelectedGifts = cart.selectedGifts || [];
+        if (JSON.stringify(normalizedGifts) !== JSON.stringify(cart.selectedGifts || [])) {
+            const giftProductMap = new Map();
+            eligibleGiftCampaigns.forEach((campaign) => {
+                campaign.giftProducts.forEach((giftProduct) => {
+                    const productId = giftProduct?._id?.toString?.();
+                    if (productId)
+                        giftProductMap.set(productId, giftProduct);
+                });
+            });
+            responseSelectedGifts = normalizedGifts.map((gift) => {
+                const productId = gift?.product?.toString?.() || '';
+                return {
+                    ...gift,
+                    product: giftProductMap.get(productId) || gift.product
+                };
+            });
+            // Do not persist when evaluating only a selected checkout subset.
+            if (!usingSelectedSubset) {
+                // Important: avoid cart.save() here to prevent VersionError on concurrent cart updates.
+                // We persist normalized gifts with updateOne (no optimistic concurrency on this loaded doc).
+                Cart_1.default.updateOne({ _id: cart._id }, { $set: { selectedGifts: normalizedGifts } }).catch((error) => {
+                    console.warn('Failed to normalize selected gifts in background:', error);
+                });
+            }
         }
         // Calculate totals
         let subtotal = 0;
@@ -54,9 +163,11 @@ const getCart = async (req, res) => {
             success: true,
             data: {
                 ...cart.toObject(),
+                selectedGifts: responseSelectedGifts,
                 subtotal,
                 total,
-                discount
+                discount,
+                eligibleGiftCampaigns
             }
         });
     }
@@ -123,6 +234,9 @@ const addToCart = async (req, res) => {
             });
         }
         await cart.save();
+        const eligibleGiftCampaigns = await computeEligibleGiftCampaigns(cart);
+        cart.selectedGifts = sanitizeSelectedGifts(cart.selectedGifts || [], eligibleGiftCampaigns);
+        await cart.save();
         res.json({
             success: true,
             message: 'Item added to cart successfully',
@@ -177,6 +291,9 @@ const updateCartItem = async (req, res) => {
         }
         item.quantity = quantity;
         await cart.save();
+        const eligibleGiftCampaigns = await computeEligibleGiftCampaigns(cart);
+        cart.selectedGifts = sanitizeSelectedGifts(cart.selectedGifts || [], eligibleGiftCampaigns);
+        await cart.save();
         res.json({
             success: true,
             message: 'Cart item updated successfully',
@@ -209,6 +326,9 @@ const removeFromCart = async (req, res) => {
         }
         cart.items.pull(itemId);
         await cart.save();
+        const eligibleGiftCampaigns = await computeEligibleGiftCampaigns(cart);
+        cart.selectedGifts = sanitizeSelectedGifts(cart.selectedGifts || [], eligibleGiftCampaigns);
+        await cart.save();
         res.json({
             success: true,
             message: 'Item removed from cart successfully',
@@ -239,6 +359,7 @@ const clearCart = async (req, res) => {
             });
         }
         cart.items = [];
+        cart.selectedGifts = [];
         cart.coupon = undefined;
         cart.couponCode = '';
         await cart.save();
@@ -353,4 +474,46 @@ const removeCoupon = async (req, res) => {
     }
 };
 exports.removeCoupon = removeCoupon;
+// Select gifts for eligible campaigns
+const selectGifts = async (req, res) => {
+    try {
+        const { selections = [] } = req.body;
+        const identifier = getCartIdentifier(req);
+        if (!identifier) {
+            return res.status(400).json({
+                success: false,
+                message: 'Guest ID required for guest users'
+            });
+        }
+        const cart = await Cart_1.default.findOne(identifier);
+        if (!cart) {
+            return res.status(404).json({
+                success: false,
+                message: 'Cart not found'
+            });
+        }
+        const eligibleGiftCampaigns = await computeEligibleGiftCampaigns(cart);
+        const normalizedSelections = sanitizeSelectedGifts(selections.map((item) => ({
+            campaign: item.campaignId,
+            product: item.productId,
+            quantity: 1,
+            selectedAt: new Date()
+        })), eligibleGiftCampaigns);
+        cart.selectedGifts = normalizedSelections;
+        await cart.save();
+        res.json({
+            success: true,
+            data: {
+                selectedGifts: normalizedSelections,
+                eligibleGiftCampaigns
+            },
+            message: 'Gift selection updated successfully'
+        });
+    }
+    catch (error) {
+        console.error('Error selecting gifts:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+};
+exports.selectGifts = selectGifts;
 //# sourceMappingURL=cart.controller.js.map

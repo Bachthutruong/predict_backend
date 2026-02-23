@@ -6,6 +6,7 @@ const SystemOrderItemSchema = new Schema({
   image: { type: String, default: '' },
   quantity: { type: Number, required: true, min: 1 },
   price: { type: Number, required: true, min: 0 },
+  isGift: { type: Boolean, default: false, index: true },
 });
 
 const SystemOrderSchema = new Schema({

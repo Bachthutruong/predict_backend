@@ -17,5 +17,6 @@ router.delete('/items/:itemId', cart_controller_1.removeFromCart);
 router.delete('/clear', cart_controller_1.clearCart);
 router.post('/apply-coupon', cart_controller_1.applyCoupon);
 router.delete('/remove-coupon', cart_controller_1.removeCoupon);
+router.post('/select-gifts', cart_controller_1.selectGifts);
 exports.default = router;
 //# sourceMappingURL=cart.js.map

@@ -38,6 +38,8 @@ const adminSuggestionPackage_1 = __importDefault(require("./routes/adminSuggesti
 const adminCategory_1 = __importDefault(require("./routes/adminCategory")); // Import admin category routes
 const adminBranch_1 = __importDefault(require("./routes/adminBranch")); // Import admin branch routes
 const adminPaymentConfig_1 = __importDefault(require("./routes/adminPaymentConfig")); // Import admin payment config routes
+const adminGiftCampaign_1 = __importDefault(require("./routes/adminGiftCampaign"));
+const news_1 = __importDefault(require("./routes/news"));
 const shop_1 = __importDefault(require("./routes/shop")); // Import shop routes
 const cart_1 = __importDefault(require("./routes/cart")); // Import cart routes
 const order_1 = __importDefault(require("./routes/order")); // Import order routes
@@ -209,6 +211,7 @@ app.use('/api/admin/suggestion-packages', adminSuggestionPackage_1.default); // 
 app.use('/api/admin/categories', adminCategory_1.default); // Use admin category routes
 app.use('/api/admin/branches', adminBranch_1.default); // Use admin branch routes
 app.use('/api/admin/payment-config', adminPaymentConfig_1.default); // Use admin payment config routes
+app.use('/api/admin/gift-campaigns', adminGiftCampaign_1.default);
 app.use('/api/admin', admin_1.default);
 app.use('/api/staff', staff_1.default);
 app.use('/api/check-in', check_in_1.default);
@@ -223,6 +226,7 @@ app.use('/api/orders', order_1.default); // Use order routes
 app.use('/api/reviews', review_1.default);
 app.use('/api/chat', chat_1.default);
 app.use('/api/settings', settings_1.default); // Settings routes (public + admin)
+app.use('/api/news', news_1.default);
 // 404 handler
 app.use('*', (req, res) => {
     res.status(404).json({

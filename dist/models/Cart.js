@@ -11,10 +11,17 @@ const CartItemSchema = new mongoose_1.Schema({
     },
     addedAt: { type: Date, default: Date.now }
 });
+const SelectedGiftSchema = new mongoose_1.Schema({
+    campaign: { type: mongoose_1.Schema.Types.ObjectId, ref: 'GiftCampaign', required: true },
+    product: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Product', required: true },
+    quantity: { type: Number, default: 1, min: 1 },
+    selectedAt: { type: Date, default: Date.now }
+});
 const CartSchema = new mongoose_1.Schema({
     user: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User' }, // Remove index: true to avoid auto-index
     guestId: { type: String }, // Remove index: true to avoid auto-index
     items: [CartItemSchema],
+    selectedGifts: [SelectedGiftSchema],
     coupon: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Coupon' },
     couponCode: { type: String, default: '' },
     lastUpdated: { type: Date, default: Date.now }

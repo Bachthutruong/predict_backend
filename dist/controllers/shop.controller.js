@@ -10,6 +10,7 @@ const Coupon_1 = __importDefault(require("../models/Coupon"));
 const SuggestionPackage_1 = __importDefault(require("../models/SuggestionPackage"));
 const Branch_1 = __importDefault(require("../models/Branch"));
 const PaymentConfig_1 = __importDefault(require("../models/PaymentConfig"));
+const GiftCampaign_1 = __importDefault(require("../models/GiftCampaign"));
 // Get all products for shop (public)
 const getShopProducts = async (req, res) => {
     try {
@@ -83,12 +84,19 @@ const getShopProductById = async (req, res) => {
         const reviewStats = stats.length > 0 ? stats[0] : { averageRating: 0, totalReviews: 0 };
         // Increment view count
         await Product_1.default.findByIdAndUpdate(id, { $inc: { viewCount: 1 } });
+        const giftCampaigns = await GiftCampaign_1.default.find({
+            isActive: true,
+            $or: [{ triggerProducts: product._id }, { triggerProducts: { $size: 0 } }]
+        })
+            .populate('giftProducts', 'name images stock isActive')
+            .select('name description requiredQuantity allowMultiSelect maxSelectableGifts giftProducts');
         res.json({
             success: true,
             data: {
                 ...product.toObject(),
                 averageRating: reviewStats.averageRating,
-                totalReviews: reviewStats.totalReviews
+                totalReviews: reviewStats.totalReviews,
+                giftCampaigns
             }
         });
     }

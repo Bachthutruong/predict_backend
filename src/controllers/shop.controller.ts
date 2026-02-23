@@ -6,6 +6,7 @@ import Coupon from '../models/Coupon';
 import SuggestionPackage from '../models/SuggestionPackage';
 import Branch from '../models/Branch';
 import PaymentConfig from '../models/PaymentConfig';
+import GiftCampaign from '../models/GiftCampaign';
 
 // Get all products for shop (public)
 export const getShopProducts = async (req: AuthRequest, res: Response) => {
@@ -100,12 +101,20 @@ export const getShopProductById = async (req: AuthRequest, res: Response) => {
     // Increment view count
     await Product.findByIdAndUpdate(id, { $inc: { viewCount: 1 } });
 
+    const giftCampaigns = await GiftCampaign.find({
+      isActive: true,
+      $or: [{ triggerProducts: product._id }, { triggerProducts: { $size: 0 } }]
+    })
+      .populate('giftProducts', 'name images stock isActive')
+      .select('name description requiredQuantity allowMultiSelect maxSelectableGifts giftProducts');
+
     res.json({
       success: true,
       data: {
         ...product.toObject(),
         averageRating: reviewStats.averageRating,
-        totalReviews: reviewStats.totalReviews
+        totalReviews: reviewStats.totalReviews,
+        giftCampaigns
       }
     });
   } catch (error) {

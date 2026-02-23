@@ -160,6 +160,12 @@ const updateSystemOrderStatus = async (req, res) => {
             });
         }
         const oldStatus = order.status;
+        if (oldStatus === 'cancelled' && status && status !== 'cancelled') {
+            return res.status(400).json({
+                success: false,
+                message: 'Cancelled orders cannot be moved back to other statuses'
+            });
+        }
         order.status = status || order.status;
         if (adminNotes)
             order.adminNotes = adminNotes;
@@ -254,13 +260,18 @@ const updateSystemOrderStatus = async (req, res) => {
                 }
             }
         }
-        if (status === 'cancelled') {
+        if (status === 'cancelled' && oldStatus !== 'cancelled') {
             order.cancelledAt = new Date();
             // Refund product stock so inventory returns to pre-order level
             for (const item of order.items) {
                 const productId = item.product?._id ?? item.product;
                 if (productId) {
-                    await Product_1.default.findByIdAndUpdate(productId, { $inc: { stock: Number(item.quantity) || 0, purchaseCount: -Number(item.quantity) || 0 } });
+                    await Product_1.default.findByIdAndUpdate(productId, {
+                        $inc: {
+                            stock: Number(item.quantity) || 0,
+                            purchaseCount: -(Number(item.quantity) || 0)
+                        }
+                    });
                 }
             }
             // If order was previously completed, revoke awarded points

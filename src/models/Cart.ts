@@ -11,10 +11,18 @@ const CartItemSchema = new Schema({
   addedAt: { type: Date, default: Date.now }
 });
 
+const SelectedGiftSchema = new Schema({
+  campaign: { type: Schema.Types.ObjectId, ref: 'GiftCampaign', required: true },
+  product: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
+  quantity: { type: Number, default: 1, min: 1 },
+  selectedAt: { type: Date, default: Date.now }
+});
+
 const CartSchema = new Schema({
   user: { type: Schema.Types.ObjectId, ref: 'User' }, // Remove index: true to avoid auto-index
   guestId: { type: String }, // Remove index: true to avoid auto-index
   items: [CartItemSchema],
+  selectedGifts: [SelectedGiftSchema],
   coupon: { type: Schema.Types.ObjectId, ref: 'Coupon' },
   couponCode: { type: String, default: '' },
   lastUpdated: { type: Date, default: Date.now }

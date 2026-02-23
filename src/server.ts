@@ -35,6 +35,8 @@ import adminSuggestionPackageRoutes from './routes/adminSuggestionPackage'; // I
 import adminCategoryRoutes from './routes/adminCategory'; // Import admin category routes
 import adminBranchRoutes from './routes/adminBranch'; // Import admin branch routes
 import adminPaymentConfigRoutes from './routes/adminPaymentConfig'; // Import admin payment config routes
+import adminGiftCampaignRoutes from './routes/adminGiftCampaign';
+import newsRoutes from './routes/news';
 import shopRoutes from './routes/shop'; // Import shop routes
 import cartRoutes from './routes/cart'; // Import cart routes
 import orderRoutes from './routes/order'; // Import order routes
@@ -238,6 +240,7 @@ app.use('/api/admin/suggestion-packages', adminSuggestionPackageRoutes); // Use 
 app.use('/api/admin/categories', adminCategoryRoutes); // Use admin category routes
 app.use('/api/admin/branches', adminBranchRoutes); // Use admin branch routes
 app.use('/api/admin/payment-config', adminPaymentConfigRoutes); // Use admin payment config routes
+app.use('/api/admin/gift-campaigns', adminGiftCampaignRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/check-in', checkInRoutes);
@@ -252,6 +255,7 @@ app.use('/api/orders', orderRoutes); // Use order routes
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/settings', settingsRoutes); // Settings routes (public + admin)
+app.use('/api/news', newsRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

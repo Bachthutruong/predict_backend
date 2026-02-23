@@ -10,10 +10,37 @@ const Cart_1 = __importDefault(require("../models/Cart"));
 const user_1 = __importDefault(require("../models/user"));
 const Product_1 = __importDefault(require("../models/Product"));
 const Coupon_1 = __importDefault(require("../models/Coupon"));
+const GiftCampaign_1 = __importDefault(require("../models/GiftCampaign"));
 const UserSuggestion_1 = __importDefault(require("../models/UserSuggestion"));
 const SuggestionPackage_1 = __importDefault(require("../models/SuggestionPackage"));
 const point_transaction_1 = __importDefault(require("../models/point-transaction"));
 const email_1 = require("../utils/email");
+const computeEligibleGiftCampaignsByItems = async (items) => {
+    if (!Array.isArray(items) || items.length === 0)
+        return [];
+    const campaigns = await GiftCampaign_1.default.find({ isActive: true }).populate('giftProducts', 'name images stock isActive');
+    const eligible = [];
+    for (const campaign of campaigns) {
+        const triggerProductIds = (campaign.triggerProducts || []).map((id) => id.toString());
+        const relatedItems = triggerProductIds.length > 0
+            ? items.filter((item) => triggerProductIds.includes(item.product._id?.toString?.() || item.product?.toString?.() || ''))
+            : items;
+        const totalQuantity = relatedItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+        if (totalQuantity < campaign.requiredQuantity)
+            continue;
+        const availableGiftProducts = (campaign.giftProducts || []).filter((gift) => gift?.isActive && Number(gift?.stock || 0) > 0);
+        if (availableGiftProducts.length === 0)
+            continue;
+        eligible.push({
+            campaignId: campaign._id.toString(),
+            requiredQuantity: Number(campaign.requiredQuantity || 1),
+            allowMultiSelect: Boolean(campaign.allowMultiSelect),
+            maxSelectableGifts: Number(campaign.maxSelectableGifts || 1),
+            giftProducts: availableGiftProducts
+        });
+    }
+    return eligible;
+};
 // Get user's orders
 const getUserOrders = async (req, res) => {
     try {
@@ -126,11 +153,13 @@ const createOrder = async (req, res) => {
             // Get user cart, or merge guest cart if provided
             cart = await Cart_1.default.findOne({ user: req.user.id })
                 .populate('items.product', 'name price stock pointsReward')
+                .populate('selectedGifts.product', 'name price stock')
                 .populate('coupon', 'code discountType discountValue pointsBonus');
             // If user has a guest cart to merge (from localStorage)
             if (guestId && guestId !== req.user.id) {
                 const guestCart = await Cart_1.default.findOne({ guestId })
                     .populate('items.product', 'name price stock pointsReward')
+                    .populate('selectedGifts.product', 'name price stock')
                     .populate('coupon', 'code discountType discountValue pointsBonus');
                 if (guestCart && guestCart.items.length > 0) {
                     if (!cart) {
@@ -138,6 +167,7 @@ const createOrder = async (req, res) => {
                         cart = new Cart_1.default({
                             user: req.user.id,
                             items: guestCart.items,
+                            selectedGifts: guestCart.selectedGifts || [],
                             coupon: guestCart.coupon,
                             couponCode: guestCart.couponCode
                         });
@@ -167,6 +197,9 @@ const createOrder = async (req, res) => {
                             cart.coupon = guestCart.coupon;
                             cart.couponCode = guestCart.couponCode;
                         }
+                        if (Array.isArray(guestCart.selectedGifts) && guestCart.selectedGifts.length > 0) {
+                            cart.selectedGifts = guestCart.selectedGifts;
+                        }
                         await cart.save();
                         // Delete guest cart
                         await Cart_1.default.deleteOne({ guestId });
@@ -184,6 +217,7 @@ const createOrder = async (req, res) => {
             }
             cart = await Cart_1.default.findOne({ guestId })
                 .populate('items.product', 'name price stock pointsReward')
+                .populate('selectedGifts.product', 'name price stock')
                 .populate('coupon', 'code discountType discountValue pointsBonus');
         }
         if (!cart || cart.items.length === 0) {
@@ -241,6 +275,52 @@ const createOrder = async (req, res) => {
             await cart.save();
         }
         catch { }
+        const eligibleGiftCampaigns = await computeEligibleGiftCampaignsByItems(itemsToProcess);
+        const campaignMap = new Map(eligibleGiftCampaigns.map((item) => [item.campaignId, item]));
+        const giftsByCampaign = new Map();
+        if (Array.isArray(cart.selectedGifts)) {
+            for (const gift of cart.selectedGifts) {
+                const campaignId = gift.campaign?.toString?.() || '';
+                const product = gift.product;
+                const productId = product?._id?.toString?.() || product?.toString?.() || '';
+                if (!campaignId || !productId)
+                    continue;
+                const campaign = campaignMap.get(campaignId);
+                if (!campaign)
+                    continue;
+                const allowedGiftIds = new Set(campaign.giftProducts.map((p) => p._id.toString()));
+                if (!allowedGiftIds.has(productId))
+                    continue;
+                if (!giftsByCampaign.has(campaignId))
+                    giftsByCampaign.set(campaignId, []);
+                const current = giftsByCampaign.get(campaignId);
+                const maxSelectable = campaign.allowMultiSelect ? campaign.maxSelectableGifts : 1;
+                if (current.length >= maxSelectable)
+                    continue;
+                if (!current.includes(productId))
+                    current.push(productId);
+            }
+        }
+        const giftOrderItems = [];
+        giftsByCampaign.forEach((giftProductIds, campaignId) => {
+            const campaign = campaignMap.get(campaignId);
+            if (!campaign)
+                return;
+            const giftProductMap = new Map(campaign.giftProducts.map((p) => [p._id.toString(), p]));
+            for (const productId of giftProductIds) {
+                const giftProduct = giftProductMap.get(productId);
+                if (!giftProduct || Number(giftProduct.stock || 0) <= 0)
+                    continue;
+                giftOrderItems.push({
+                    product: giftProduct._id,
+                    quantity: 1,
+                    price: 0,
+                    name: giftProduct.name || '',
+                    image: Array.isArray(giftProduct.images) && giftProduct.images[0] ? giftProduct.images[0] : '',
+                    isGift: true
+                });
+            }
+        });
         // Apply coupon discount
         let discountAmount = 0;
         let coupon = null;
@@ -248,7 +328,7 @@ const createOrder = async (req, res) => {
             coupon = await Coupon_1.default.findOne({ code: couponCode });
             if (coupon && coupon.isValid()) {
                 // For guests, skip user-specific validation
-                const canBeUsed = isGuest ? true : coupon.canBeUsedBy(req.user?.id, subtotal, cart.items.map((item) => ({
+                const canBeUsed = isGuest ? true : coupon.canBeUsedBy(req.user?.id, subtotal, itemsToProcess.map((item) => ({
                     product: item.product._id,
                     quantity: item.quantity
                 })));
@@ -381,7 +461,8 @@ const createOrder = async (req, res) => {
                 product: it.product,
                 quantity: it.quantity,
                 price: it.price,
-            })),
+                isGift: false,
+            })).concat(giftOrderItems),
             subtotal,
             shippingCost,
             discountAmount,
@@ -465,6 +546,9 @@ const createOrder = async (req, res) => {
             const product = item.product;
             await Product_1.default.findByIdAndUpdate(product._id, { $inc: { stock: -item.quantity, purchaseCount: item.quantity } });
         }
+        for (const gift of giftOrderItems) {
+            await Product_1.default.findByIdAndUpdate(gift.product, { $inc: { stock: -gift.quantity, purchaseCount: gift.quantity } });
+        }
         // Update coupon usage
         if (coupon) {
             coupon.usedCount += 1;
@@ -480,10 +564,12 @@ const createOrder = async (req, res) => {
         // Remove ordered items from cart (only selected items)
         if (selectedItemIds && selectedItemIds.length > 0) {
             cart.items = cart.items.filter((item) => !selectedItemIds.includes(item._id.toString()));
+            cart.selectedGifts = [];
         }
         else {
             // If no selection, clear entire cart
             cart.items = [];
+            cart.selectedGifts = [];
             cart.coupon = undefined;
             cart.couponCode = '';
         }
