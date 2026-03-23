@@ -47,6 +47,17 @@ const UserSchema = new mongoose_1.Schema({
             type: mongoose_1.Schema.Types.ObjectId,
             ref: 'UserSuggestion'
         }],
+    menuConfig: {
+        enabled: { type: Boolean, default: false },
+        items: [{
+                key: { type: String, required: true },
+                name: { type: String, required: true },
+                href: { type: String, required: true },
+                visible: { type: Boolean, default: true },
+                openInNewTab: { type: Boolean, default: false },
+                order: { type: Number, required: true }
+            }]
+    }
 }, { timestamps: true });
 // Compound indexes for better query performance
 UserSchema.index({ email: 1, isEmailVerified: 1 });

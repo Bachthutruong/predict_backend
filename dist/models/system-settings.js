@@ -4,7 +4,7 @@ exports.initializeDefaultSystemSettings = void 0;
 const mongoose_1 = require("mongoose");
 const SystemSettingsSchema = new mongoose_1.Schema({
     settingKey: { type: String, required: true, unique: true },
-    settingValue: { type: Number, required: true },
+    settingValue: { type: mongoose_1.Schema.Types.Mixed, required: true },
     description: { type: String, required: true },
 }, { timestamps: true });
 SystemSettingsSchema.set('toJSON', {

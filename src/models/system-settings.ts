@@ -2,7 +2,7 @@ import mongoose, { Schema, models, model } from 'mongoose';
 
 const SystemSettingsSchema = new Schema({
   settingKey: { type: String, required: true, unique: true },
-  settingValue: { type: Number, required: true },
+  settingValue: { type: Schema.Types.Mixed, required: true },
   description: { type: String, required: true },
 }, { timestamps: true });
 
