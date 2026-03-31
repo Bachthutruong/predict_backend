@@ -107,6 +107,7 @@ app.use(cors({
   allowedHeaders: [
     'Content-Type', 
     'Authorization', 
+    'X-Language',
     'X-Guest-Id',
     'X-WC-Webhook-Signature', 
     'X-WC-Webhook-Source', 

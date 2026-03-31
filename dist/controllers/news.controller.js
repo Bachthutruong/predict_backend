@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteNews = exports.updateNews = exports.createNews = exports.getManageNewsById = exports.getManageNewsList = exports.getNewsBySlug = exports.getNewsList = void 0;
 const NewsArticle_1 = __importDefault(require("../models/NewsArticle"));
+const language_1 = require("../utils/language");
 const slugify = (value) => value
     .toLowerCase()
     .trim()
@@ -22,12 +23,24 @@ const generateUniqueSlug = async (title, excludeId) => {
         slug = `${base}-${count++}`;
     }
 };
-const getNewsList = async (_req, res) => {
+const getNewsList = async (req, res) => {
     try {
+        const lang = (0, language_1.resolveLanguageFromRequest)(req);
         const articles = await NewsArticle_1.default.find({ status: 'published' })
             .populate('author', 'name')
             .sort({ publishedAt: -1, createdAt: -1 });
-        res.json({ success: true, data: articles });
+        const localized = articles
+            .map((article) => {
+            const articleObj = article.toObject();
+            return {
+                ...articleObj,
+                title: (0, language_1.pickLocalizedText)(lang, articleObj.titleTranslations, ''),
+                summary: (0, language_1.pickLocalizedText)(lang, articleObj.summaryTranslations, ''),
+                content: (0, language_1.pickLocalizedText)(lang, articleObj.contentTranslations, '')
+            };
+        })
+            .filter((article) => Boolean(article.title && article.content));
+        res.json({ success: true, data: localized });
     }
     catch (error) {
         console.error('Error getting news list:', error);
@@ -37,10 +50,21 @@ const getNewsList = async (_req, res) => {
 exports.getNewsList = getNewsList;
 const getNewsBySlug = async (req, res) => {
     try {
+        const lang = (0, language_1.resolveLanguageFromRequest)(req);
         const article = await NewsArticle_1.default.findOne({ slug: req.params.slug, status: 'published' }).populate('author', 'name');
         if (!article)
             return res.status(404).json({ success: false, message: 'News article not found' });
-        res.json({ success: true, data: article });
+        const articleObj = article.toObject();
+        const localized = {
+            ...articleObj,
+            title: (0, language_1.pickLocalizedText)(lang, articleObj.titleTranslations, ''),
+            summary: (0, language_1.pickLocalizedText)(lang, articleObj.summaryTranslations, ''),
+            content: (0, language_1.pickLocalizedText)(lang, articleObj.contentTranslations, '')
+        };
+        if (!localized.title || !localized.content) {
+            return res.status(404).json({ success: false, message: 'News article not found' });
+        }
+        res.json({ success: true, data: localized });
     }
     catch (error) {
         console.error('Error getting news:', error);
@@ -74,16 +98,30 @@ const getManageNewsById = async (req, res) => {
 exports.getManageNewsById = getManageNewsById;
 const createNews = async (req, res) => {
     try {
-        const { title, summary = '', content, coverImage = '', status = 'draft' } = req.body;
-        if (!title || !content) {
+        const { title, summary = '', content, titleTranslations, summaryTranslations, contentTranslations, coverImage = '', status = 'draft' } = req.body;
+        const viTitle = titleTranslations?.vi || title;
+        const viContent = contentTranslations?.vi || content;
+        if (!viTitle || !viContent) {
             return res.status(400).json({ success: false, message: 'Title and content are required' });
         }
-        const slug = await generateUniqueSlug(String(title));
+        const slug = await generateUniqueSlug(String(viTitle));
         const article = new NewsArticle_1.default({
-            title,
+            title: viTitle,
+            titleTranslations: {
+                vi: viTitle || '',
+                'zh-TW': titleTranslations?.['zh-TW'] || ''
+            },
             slug,
-            summary,
-            content,
+            summary: summaryTranslations?.vi || summary,
+            summaryTranslations: {
+                vi: summaryTranslations?.vi || summary || '',
+                'zh-TW': summaryTranslations?.['zh-TW'] || ''
+            },
+            content: viContent,
+            contentTranslations: {
+                vi: viContent || '',
+                'zh-TW': contentTranslations?.['zh-TW'] || ''
+            },
             coverImage,
             status,
             publishedAt: status === 'published' ? new Date() : undefined,
@@ -109,6 +147,27 @@ const updateNews = async (req, res) => {
             if (Object.prototype.hasOwnProperty.call(req.body, key)) {
                 updateData[key] = req.body[key];
             }
+        }
+        if (Object.prototype.hasOwnProperty.call(req.body, 'titleTranslations') || Object.prototype.hasOwnProperty.call(req.body, 'contentTranslations') || Object.prototype.hasOwnProperty.call(req.body, 'summaryTranslations')) {
+            const incoming = req.body;
+            const resolvedTitleTranslations = {
+                vi: incoming.titleTranslations?.vi || incoming.title || existing.titleTranslations?.vi || existing.title || '',
+                'zh-TW': incoming.titleTranslations?.['zh-TW'] || existing.titleTranslations?.['zh-TW'] || ''
+            };
+            const resolvedSummaryTranslations = {
+                vi: incoming.summaryTranslations?.vi || incoming.summary || existing.summaryTranslations?.vi || existing.summary || '',
+                'zh-TW': incoming.summaryTranslations?.['zh-TW'] || existing.summaryTranslations?.['zh-TW'] || ''
+            };
+            const resolvedContentTranslations = {
+                vi: incoming.contentTranslations?.vi || incoming.content || existing.contentTranslations?.vi || existing.content || '',
+                'zh-TW': incoming.contentTranslations?.['zh-TW'] || existing.contentTranslations?.['zh-TW'] || ''
+            };
+            updateData.titleTranslations = resolvedTitleTranslations;
+            updateData.summaryTranslations = resolvedSummaryTranslations;
+            updateData.contentTranslations = resolvedContentTranslations;
+            updateData.title = resolvedTitleTranslations.vi;
+            updateData.summary = resolvedSummaryTranslations.vi;
+            updateData.content = resolvedContentTranslations.vi;
         }
         if (typeof updateData.title === 'string' && updateData.title !== existing.title) {
             updateData.slug = await generateUniqueSlug(updateData.title, existing._id.toString());

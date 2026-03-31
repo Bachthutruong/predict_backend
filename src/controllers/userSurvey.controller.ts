@@ -4,12 +4,14 @@ import SurveySubmission from '../models/survey-submission';
 import User from '../models/user';
 import PointTransaction from '../models/point-transaction';
 import mongoose from 'mongoose';
+import { pickLocalizedText, resolveLanguageFromRequest } from '../utils/language';
 
 // @desc    Get all published surveys available to users
 // @route   GET /api/surveys
 // @access  Private
 export const getPublishedSurveys = async (req: Request, res: Response) => {
     try {
+        const lang = resolveLanguageFromRequest(req);
         const surveys = await Survey.find({
             status: 'published',
             $or: [
@@ -18,8 +20,18 @@ export const getPublishedSurveys = async (req: Request, res: Response) => {
                 { endDate: { $gt: new Date() } }
             ]
         }).select('-questions.isAntiFraud -questions.options.antiFraudGroupId').sort({ createdAt: -1 });
+        const localized = surveys
+          .map((survey: any) => {
+            const surveyObj = survey.toObject();
+            return {
+              ...surveyObj,
+              title: pickLocalizedText(lang, surveyObj.titleTranslations, ''),
+              description: pickLocalizedText(lang, surveyObj.descriptionTranslations, '')
+            };
+          })
+          .filter((survey) => Boolean(survey.title && survey.description));
 
-        res.json({ message: 'Available surveys fetched successfully', data: surveys });
+        res.json({ message: 'Available surveys fetched successfully', data: localized });
     } catch (error) {
         console.error('Error fetching published surveys:', error);
         res.status(500).json({ message: 'Server error' });
@@ -31,6 +43,7 @@ export const getPublishedSurveys = async (req: Request, res: Response) => {
 // @access  Private
 export const getSurveyToFill = async (req: Request, res: Response) => {
     try {
+        const lang = resolveLanguageFromRequest(req);
         const survey = await Survey.findOne({
             _id: req.params.id,
             status: 'published'
@@ -40,6 +53,29 @@ export const getSurveyToFill = async (req: Request, res: Response) => {
             return res.status(404).json({ message: 'Survey not found or is not currently active.' });
         }
 
+        const surveyObject = survey.toObject();
+        const localizedQuestions = (surveyObject.questions || [])
+          .map((question: any) => ({
+            ...question,
+            text: pickLocalizedText(lang, question.textTranslations, ''),
+            options: (question.options || [])
+              .map((option: any) => ({
+                ...option,
+                text: pickLocalizedText(lang, option.textTranslations, '')
+              }))
+              .filter((option: any) => Boolean(option.text))
+          }))
+          .filter((question: any) => Boolean(question.text));
+        const localizedSurvey = {
+          ...surveyObject,
+          title: pickLocalizedText(lang, surveyObject.titleTranslations, ''),
+          description: pickLocalizedText(lang, surveyObject.descriptionTranslations, ''),
+          questions: localizedQuestions
+        };
+        if (!localizedSurvey.title || !localizedSurvey.description) {
+          return res.status(404).json({ message: 'Survey not found or is not currently active.' });
+        }
+
         // Check if user has already submitted this survey
         const userId = (req as any).user.id;
         const existingSubmission = await SurveySubmission.findOne({ surveyId: survey._id, userId });
@@ -47,7 +83,7 @@ export const getSurveyToFill = async (req: Request, res: Response) => {
             return res.status(403).json({ message: 'You have already completed this survey.' });
         }
 
-        res.json({ message: 'Survey details fetched successfully', data: survey });
+        res.json({ message: 'Survey details fetched successfully', data: localizedSurvey });
     } catch (error) {
         console.error('Error fetching survey to fill:', error);
         res.status(500).json({ message: 'Server error' });
@@ -60,6 +96,7 @@ export const getSurveyToFill = async (req: Request, res: Response) => {
 export const submitSurvey = async (req: Request, res: Response) => {
     const surveyId = req.params.id;
     const userId = (req as any).user.id;
+    const lang = resolveLanguageFromRequest(req);
     const { answers }: { answers: { questionId: string; answer: string[]; otherText?: string }[] } = req.body;
 
     const session = await mongoose.startSession();
@@ -90,7 +127,14 @@ export const submitSurvey = async (req: Request, res: Response) => {
                 if (userAnswer && userAnswer.answer.length > 0) {
                     // For each answer from the user, find the corresponding option in the survey question
                     for (const ans of userAnswer.answer) {
-                        const option = q.options.find(opt => opt.text === ans);
+                        const option = q.options.find(opt => {
+                            const localizedOptionText = pickLocalizedText(
+                              lang,
+                              (opt as any).textTranslations as Record<string, string> | undefined,
+                              (opt as any).text || ''
+                            );
+                            return opt.text === ans || localizedOptionText === ans;
+                        });
                         if (option && option.antiFraudGroupId) {
                             fraudAnswersGroupIds.push(option.antiFraudGroupId);
                         }
@@ -111,7 +155,7 @@ export const submitSurvey = async (req: Request, res: Response) => {
             const question = survey.questions.find(q => q.id === ans.questionId);
             return {
                 questionId: ans.questionId,
-                questionText: question ? question.text : 'Unknown Question',
+                questionText: question ? pickLocalizedText(lang, (question as any).textTranslations, question.text) : 'Unknown Question',
                 questionType: question ? question.type : 'unknown',
                 answer: ans.answer,
                 otherText: ans.otherText,

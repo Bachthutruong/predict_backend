@@ -4,6 +4,14 @@ const mongoose_1 = require("mongoose");
 const ProductSchema = new mongoose_1.Schema({
     name: { type: String, required: true },
     description: { type: String, required: true },
+    nameTranslations: {
+        vi: { type: String, default: '' },
+        'zh-TW': { type: String, default: '' }
+    },
+    descriptionTranslations: {
+        vi: { type: String, default: '' },
+        'zh-TW': { type: String, default: '' }
+    },
     price: { type: Number, required: true, min: 0 },
     originalPrice: { type: Number, min: 0 }, // For showing discount
     images: [{ type: String, required: true }], // Array of image URLs

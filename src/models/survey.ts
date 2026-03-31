@@ -3,17 +3,29 @@ import { Schema, model, Document, Types } from 'mongoose';
 // Interface for a single answer option in a question
 export interface ISurveyOption extends Document {
   text: string;
+  textTranslations?: {
+    vi?: string;
+    'zh-TW'?: string;
+  };
   antiFraudGroupId?: string; // Used for anti-fraud check
 }
 
 const SurveyOptionSchema = new Schema<ISurveyOption>({
   text: { type: String, required: true },
+  textTranslations: {
+    vi: { type: String, default: '' },
+    'zh-TW': { type: String, default: '' }
+  },
   antiFraudGroupId: { type: String },
 });
 
 // Interface for a single question in a survey
 export interface ISurveyQuestion extends Document {
   text: string;
+  textTranslations?: {
+    vi?: string;
+    'zh-TW'?: string;
+  };
   type: 'short-text' | 'long-text' | 'single-choice' | 'multiple-choice';
   isRequired: boolean;
   options: ISurveyOption[];
@@ -22,6 +34,10 @@ export interface ISurveyQuestion extends Document {
 
 const SurveyQuestionSchema = new Schema<ISurveyQuestion>({
   text: { type: String, required: true },
+  textTranslations: {
+    vi: { type: String, default: '' },
+    'zh-TW': { type: String, default: '' }
+  },
   type: { 
     type: String, 
     enum: ['short-text', 'long-text', 'single-choice', 'multiple-choice'], 
@@ -36,6 +52,14 @@ const SurveyQuestionSchema = new Schema<ISurveyQuestion>({
 export interface ISurvey extends Document {
   title: string;
   description: string;
+  titleTranslations?: {
+    vi?: string;
+    'zh-TW'?: string;
+  };
+  descriptionTranslations?: {
+    vi?: string;
+    'zh-TW'?: string;
+  };
   imageUrl?: string;
   status: 'draft' | 'published' | 'closed';
   pointsAwarded: number;
@@ -47,6 +71,14 @@ export interface ISurvey extends Document {
 const SurveySchema = new Schema<ISurvey>({
   title: { type: String, required: true },
   description: { type: String, required: true },
+  titleTranslations: {
+    vi: { type: String, default: '' },
+    'zh-TW': { type: String, default: '' }
+  },
+  descriptionTranslations: {
+    vi: { type: String, default: '' },
+    'zh-TW': { type: String, default: '' }
+  },
   imageUrl: { type: String },
   status: { 
     type: String, 

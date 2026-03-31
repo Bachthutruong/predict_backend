@@ -14,6 +14,7 @@ const Product_1 = __importDefault(require("../models/Product"));
 const InventoryLog_1 = __importDefault(require("../models/InventoryLog"));
 const UserSuggestion_1 = __importDefault(require("../models/UserSuggestion"));
 const cache_1 = require("../utils/cache");
+const language_1 = require("../utils/language");
 const router = express_1.default.Router();
 // Cache is now managed by utils/cache.ts
 // Chuẩn hóa chuỗi để so sánh đáp án
@@ -47,9 +48,10 @@ function isPredictionActive(p) {
 // Get all active predictions (filter by time: no dates = always, or within startDate-endDate)
 router.get('/', async (req, res) => {
     try {
+        const lang = (0, language_1.resolveLanguageFromRequest)(req);
         // Check cache first
-        if ((0, cache_1.isCacheValid)()) {
-            const { cache } = (0, cache_1.getCache)();
+        if ((0, cache_1.isCacheValid)(lang)) {
+            const { cache } = (0, cache_1.getCache)(lang);
             return res.json({
                 success: true,
                 data: cache,
@@ -71,16 +73,22 @@ router.get('/', async (req, res) => {
         ]);
         const winnerMap = Object.fromEntries(winnerCounts.map((w) => [w._id.toString(), w.count]));
         const transformedPredictions = predictions.map((prediction) => {
+            const localizedTitle = (0, language_1.pickLocalizedText)(lang, prediction.titleTranslations, '');
+            const localizedDescription = (0, language_1.pickLocalizedText)(lang, prediction.descriptionTranslations, '');
+            if (!localizedTitle || !localizedDescription)
+                return null;
             const p = {
                 ...prediction,
+                title: localizedTitle,
+                description: localizedDescription,
                 id: prediction._id.toString(),
                 winnerCount: winnerMap[prediction._id.toString()] || 0,
                 maxWinners: prediction.maxWinners ?? 1
             };
             p.isCurrentlyActive = isPredictionActive(prediction);
             return p;
-        });
-        (0, cache_1.setCache)(transformedPredictions);
+        }).filter(Boolean);
+        (0, cache_1.setCache)(transformedPredictions, lang);
         res.json({
             success: true,
             data: transformedPredictions,
@@ -98,6 +106,7 @@ router.get('/', async (req, res) => {
 // Get prediction details - optionalAuthenticate để có userAttemptCount khi user đăng nhập
 router.get('/:id', auth_1.optionalAuthenticate, predictionAuth_1.checkPredictionViewAccess, async (req, res) => {
     try {
+        const lang = (0, language_1.resolveLanguageFromRequest)(req);
         const { page = 1, limit = 20 } = req.query;
         const pageNum = parseInt(page);
         const limitNum = parseInt(limit);
@@ -110,6 +119,11 @@ router.get('/:id', auth_1.optionalAuthenticate, predictionAuth_1.checkPrediction
             .populate({ path: 'rewards.productId', model: 'Product', select: 'name images stock' });
         if (!prediction) {
             return res.status(404).json({ success: false, message: 'Prediction not found' });
+        }
+        const localizedTitle = (0, language_1.pickLocalizedText)(lang, prediction.titleTranslations, '');
+        const localizedDescription = (0, language_1.pickLocalizedText)(lang, prediction.descriptionTranslations, '');
+        if (!localizedTitle || !localizedDescription) {
+            return res.status(404).json({ success: false, message: 'Prediction not found for language' });
         }
         const predictionObj = prediction.toObject();
         const winnerCount = await user_prediction_1.default.countDocuments({ predictionId: req.params.id, isCorrect: true });
@@ -154,6 +168,8 @@ router.get('/:id', auth_1.optionalAuthenticate, predictionAuth_1.checkPrediction
             data: {
                 prediction: {
                     ...predictionObj,
+                    title: localizedTitle,
+                    description: localizedDescription,
                     id: predictionObj._id.toString(),
                     answer: canViewAnswer ? prediction.getDecryptedAnswer() : '***ENCRYPTED***',
                     rewardPoints: prediction.rewardPoints,

@@ -8,11 +8,30 @@ const survey_1 = __importDefault(require("../models/survey"));
 const survey_submission_1 = __importDefault(require("../models/survey-submission"));
 const exceljs_1 = __importDefault(require("exceljs"));
 const mongoose_1 = __importDefault(require("mongoose"));
+const language_1 = require("../utils/language");
+const normalizeSurveyQuestions = (questions = []) => {
+    return questions.map((question) => ({
+        ...question,
+        textTranslations: {
+            vi: question?.textTranslations?.vi || question?.text || '',
+            'zh-TW': question?.textTranslations?.['zh-TW'] || ''
+        },
+        text: question?.textTranslations?.vi || question?.text || '',
+        options: (question?.options || []).map((option) => ({
+            ...option,
+            textTranslations: {
+                vi: option?.textTranslations?.vi || option?.text || '',
+                'zh-TW': option?.textTranslations?.['zh-TW'] || ''
+            },
+            text: option?.textTranslations?.vi || option?.text || ''
+        }))
+    }));
+};
 // @desc    Create a new survey
 // @route   POST /api/admin/surveys
 // @access  Private/Admin
 const createSurvey = async (req, res) => {
-    const { title, description, pointsAwarded, endDate, questions, status, imageUrl } = req.body;
+    const { title, description, titleTranslations, descriptionTranslations, pointsAwarded, endDate, questions, status, imageUrl } = req.body;
     // Basic validation
     if (!title || !description || !questions || !Array.isArray(questions)) {
         return res.status(400).json({ message: 'Missing required fields: title, description, questions.' });
@@ -30,11 +49,19 @@ const createSurvey = async (req, res) => {
     }
     try {
         const survey = new survey_1.default({
-            title,
-            description,
+            title: titleTranslations?.vi || title,
+            description: descriptionTranslations?.vi || description,
+            titleTranslations: {
+                vi: titleTranslations?.vi || title || '',
+                'zh-TW': titleTranslations?.['zh-TW'] || ''
+            },
+            descriptionTranslations: {
+                vi: descriptionTranslations?.vi || description || '',
+                'zh-TW': descriptionTranslations?.['zh-TW'] || ''
+            },
             pointsAwarded,
             endDate,
-            questions,
+            questions: normalizeSurveyQuestions(questions),
             status,
             imageUrl,
             createdBy: req.user.id, // Assuming user ID is available on request
@@ -56,8 +83,17 @@ exports.createSurvey = createSurvey;
 // @access  Private/Admin
 const getSurveys = async (req, res) => {
     try {
+        const lang = (0, language_1.resolveLanguageFromRequest)(req);
         const surveys = await survey_1.default.find().sort({ createdAt: -1 });
-        res.json({ message: 'Surveys fetched successfully', data: surveys });
+        const localized = surveys.map((survey) => {
+            const surveyObj = survey.toObject();
+            return {
+                ...surveyObj,
+                title: (0, language_1.pickLocalizedText)(lang, surveyObj.titleTranslations, surveyObj.title),
+                description: (0, language_1.pickLocalizedText)(lang, surveyObj.descriptionTranslations, surveyObj.description)
+            };
+        });
+        res.json({ message: 'Surveys fetched successfully', data: localized });
     }
     catch (error) {
         console.error('Error fetching surveys:', error);
@@ -70,11 +106,29 @@ exports.getSurveys = getSurveys;
 // @access  Private/Admin
 const getSurveyById = async (req, res) => {
     try {
+        const lang = (0, language_1.resolveLanguageFromRequest)(req);
         const survey = await survey_1.default.findById(req.params.id);
         if (!survey) {
             return res.status(404).json({ message: 'Survey not found' });
         }
-        res.json({ message: 'Survey fetched successfully', data: survey });
+        const surveyObj = survey.toObject();
+        const localizedQuestions = (surveyObj.questions || []).map((question) => ({
+            ...question,
+            text: (0, language_1.pickLocalizedText)(lang, question.textTranslations, question.text),
+            options: (question.options || []).map((option) => ({
+                ...option,
+                text: (0, language_1.pickLocalizedText)(lang, option.textTranslations, option.text)
+            }))
+        }));
+        res.json({
+            message: 'Survey fetched successfully',
+            data: {
+                ...surveyObj,
+                title: (0, language_1.pickLocalizedText)(lang, surveyObj.titleTranslations, surveyObj.title),
+                description: (0, language_1.pickLocalizedText)(lang, surveyObj.descriptionTranslations, surveyObj.description),
+                questions: localizedQuestions
+            }
+        });
     }
     catch (error) {
         console.error('Error fetching survey by ID:', error);
@@ -86,7 +140,7 @@ exports.getSurveyById = getSurveyById;
 // @route   PUT /api/admin/surveys/:id
 // @access  Private/Admin
 const updateSurvey = async (req, res) => {
-    const { title, description, pointsAwarded, endDate, questions, status, imageUrl } = req.body;
+    const { title, description, titleTranslations, descriptionTranslations, pointsAwarded, endDate, questions, status, imageUrl } = req.body;
     try {
         const survey = await survey_1.default.findById(req.params.id);
         if (!survey) {
@@ -104,11 +158,25 @@ const updateSurvey = async (req, res) => {
                 }
             }
         }
-        survey.title = title || survey.title;
-        survey.description = description || survey.description;
+        if (titleTranslations || descriptionTranslations) {
+            survey.titleTranslations = {
+                vi: titleTranslations?.vi || title || survey.titleTranslations?.vi || survey.title || '',
+                'zh-TW': titleTranslations?.['zh-TW'] || survey.titleTranslations?.['zh-TW'] || ''
+            };
+            survey.descriptionTranslations = {
+                vi: descriptionTranslations?.vi || description || survey.descriptionTranslations?.vi || survey.description || '',
+                'zh-TW': descriptionTranslations?.['zh-TW'] || survey.descriptionTranslations?.['zh-TW'] || ''
+            };
+            survey.title = survey.titleTranslations.vi || survey.title;
+            survey.description = survey.descriptionTranslations.vi || survey.description;
+        }
+        else {
+            survey.title = title || survey.title;
+            survey.description = description || survey.description;
+        }
         survey.pointsAwarded = pointsAwarded ?? survey.pointsAwarded;
         survey.endDate = endDate;
-        survey.questions = questions || survey.questions;
+        survey.questions = questions ? normalizeSurveyQuestions(questions) : survey.questions;
         survey.status = status || survey.status;
         survey.imageUrl = imageUrl || survey.imageUrl;
         const updatedSurvey = await survey.save();

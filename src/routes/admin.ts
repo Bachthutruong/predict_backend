@@ -85,7 +85,7 @@ router.get('/dashboard-stats', async (req, res) => {
 // Create prediction (Dự đoán trúng thưởng - merged with contest)
 router.post('/predictions', authenticate, async (req: AuthRequest, res) => {
   try {
-    const { title, description, imageUrl, correctAnswer } = req.body;
+    const { title, description, imageUrl, correctAnswer, titleTranslations = {}, descriptionTranslations = {} } = req.body;
     const pointsCost = Number(req.body.pointsCost);
     const rewardPointsInput = req.body.rewardPoints;
     const rewardPoints = Number(rewardPointsInput);
@@ -96,9 +96,19 @@ router.post('/predictions', authenticate, async (req: AuthRequest, res) => {
     const rewards = req.body.rewards || [];
 
     const encryptedAnswer = encrypt(String(correctAnswer ?? '').trim());
+    const normalizedTitleTranslations = {
+      vi: String((titleTranslations as any).vi || title || '').trim(),
+      'zh-TW': String((titleTranslations as any)['zh-TW'] || '').trim()
+    };
+    const normalizedDescriptionTranslations = {
+      vi: String((descriptionTranslations as any).vi || description || '').trim(),
+      'zh-TW': String((descriptionTranslations as any)['zh-TW'] || '').trim()
+    };
     const prediction = new Prediction({
-      title,
-      description,
+      title: normalizedTitleTranslations.vi,
+      description: normalizedDescriptionTranslations.vi,
+      titleTranslations: normalizedTitleTranslations,
+      descriptionTranslations: normalizedDescriptionTranslations,
       imageUrl,
       answer: encryptedAnswer,
       pointsCost: isNaN(pointsCost) ? 0 : pointsCost,
@@ -254,7 +264,7 @@ router.get('/predictions/:id', checkPredictionViewAccess as any, authenticate, a
 router.put('/predictions/:id', checkPredictionAuthor as any, authenticate, async (req: any, res) => {
   try {
     const { id } = req.params;
-    const { title, description, imageUrl, correctAnswer, status } = req.body;
+    const { title, description, imageUrl, correctAnswer, status, titleTranslations = {}, descriptionTranslations = {} } = req.body;
     const pointsCost = Number(req.body.pointsCost);
     const rewardPointsBody = Number(req.body.rewardPoints);
     const startDate = req.body.startDate ? new Date(req.body.startDate) : null;
@@ -264,8 +274,18 @@ router.put('/predictions/:id', checkPredictionAuthor as any, authenticate, async
     const rewards = req.body.rewards || [];
     const prediction = req.prediction!;
 
-    prediction.title = title;
-    prediction.description = description;
+    const normalizedTitleTranslations = {
+      vi: String((titleTranslations as any).vi || title || '').trim(),
+      'zh-TW': String((titleTranslations as any)['zh-TW'] || '').trim()
+    };
+    const normalizedDescriptionTranslations = {
+      vi: String((descriptionTranslations as any).vi || description || '').trim(),
+      'zh-TW': String((descriptionTranslations as any)['zh-TW'] || '').trim()
+    };
+    prediction.title = normalizedTitleTranslations.vi;
+    prediction.description = normalizedDescriptionTranslations.vi;
+    (prediction as any).titleTranslations = normalizedTitleTranslations;
+    (prediction as any).descriptionTranslations = normalizedDescriptionTranslations;
     prediction.imageUrl = imageUrl;
     prediction.answer = encrypt(String(correctAnswer ?? '').trim());
     prediction.pointsCost = isNaN(pointsCost) ? prediction.pointsCost : pointsCost;

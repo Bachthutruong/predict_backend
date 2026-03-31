@@ -8,9 +8,11 @@ const voting_campaign_1 = __importDefault(require("../models/voting-campaign"));
 const vote_entry_1 = __importDefault(require("../models/vote-entry"));
 const user_vote_1 = __importDefault(require("../models/user-vote"));
 const mongoose_1 = __importDefault(require("mongoose"));
+const language_1 = require("../utils/language");
 // Get all voting campaigns for admin
 const getVotingCampaigns = async (req, res) => {
     try {
+        const lang = (0, language_1.resolveLanguageFromRequest)(req);
         const { page = 1, limit = 10, status, search } = req.query;
         const pageNum = parseInt(page);
         const limitNum = parseInt(limit);
@@ -89,8 +91,11 @@ const getVotingCampaigns = async (req, res) => {
                     dynamicStatus = 'closed';
                 }
             }
+            const campaignObject = campaign.toObject();
             return {
-                ...campaign.toObject(),
+                ...campaignObject,
+                title: (0, language_1.pickLocalizedText)(lang, campaignObject.titleTranslations, campaignObject.title),
+                description: (0, language_1.pickLocalizedText)(lang, campaignObject.descriptionTranslations, campaignObject.description),
                 entryCount,
                 totalVotes,
                 status: dynamicStatus // Ghi đè status trả về
@@ -121,6 +126,7 @@ exports.getVotingCampaigns = getVotingCampaigns;
 // Get single voting campaign with entries
 const getVotingCampaign = async (req, res) => {
     try {
+        const lang = (0, language_1.resolveLanguageFromRequest)(req);
         const { id } = req.params;
         if (!mongoose_1.default.Types.ObjectId.isValid(id)) {
             return res.status(400).json({
@@ -160,14 +166,25 @@ const getVotingCampaign = async (req, res) => {
         // Get vote statistics
         const totalVotes = await user_vote_1.default.countDocuments({ campaignId: id });
         const uniqueVoters = await user_vote_1.default.distinct('userId', { campaignId: id });
+        const campaignObject = campaign.toObject();
+        const localizedEntries = entries.map((entry) => {
+            const entryObj = entry.toObject();
+            return {
+                ...entryObj,
+                title: (0, language_1.pickLocalizedText)(lang, entryObj.titleTranslations, entryObj.title),
+                description: (0, language_1.pickLocalizedText)(lang, entryObj.descriptionTranslations, entryObj.description)
+            };
+        });
         res.json({
             success: true,
             data: {
                 campaign: {
-                    ...campaign.toObject(),
+                    ...campaignObject,
+                    title: (0, language_1.pickLocalizedText)(lang, campaignObject.titleTranslations, campaignObject.title),
+                    description: (0, language_1.pickLocalizedText)(lang, campaignObject.descriptionTranslations, campaignObject.description),
                     status: dynamicStatus
                 },
-                entries,
+                entries: localizedEntries,
                 statistics: {
                     totalEntries: entries.length,
                     totalVotes,
@@ -188,7 +205,7 @@ exports.getVotingCampaign = getVotingCampaign;
 // Create new voting campaign
 const createVotingCampaign = async (req, res) => {
     try {
-        const { title, description, imageUrl, startDate, endDate, pointsPerVote, maxVotesPerUser, votingFrequency, status // Add status to the destructuring
+        const { title, description, titleTranslations, descriptionTranslations, imageUrl, startDate, endDate, pointsPerVote, maxVotesPerUser, votingFrequency, status // Add status to the destructuring
          } = req.body;
         const userId = req.user.id;
         // Validation
@@ -214,8 +231,16 @@ const createVotingCampaign = async (req, res) => {
             });
         }
         const campaign = new voting_campaign_1.default({
-            title,
-            description,
+            title: titleTranslations?.vi || title,
+            description: descriptionTranslations?.vi || description,
+            titleTranslations: {
+                vi: titleTranslations?.vi || title || '',
+                'zh-TW': titleTranslations?.['zh-TW'] || ''
+            },
+            descriptionTranslations: {
+                vi: descriptionTranslations?.vi || description || '',
+                'zh-TW': descriptionTranslations?.['zh-TW'] || ''
+            },
             imageUrl: imageUrl || '',
             startDate: start,
             endDate: end,
@@ -245,7 +270,7 @@ exports.createVotingCampaign = createVotingCampaign;
 const updateVotingCampaign = async (req, res) => {
     try {
         const { id } = req.params;
-        const updates = req.body;
+        const updates = { ...req.body };
         if (!mongoose_1.default.Types.ObjectId.isValid(id)) {
             return res.status(400).json({
                 success: false,
@@ -258,6 +283,18 @@ const updateVotingCampaign = async (req, res) => {
                 success: false,
                 message: 'Campaign not found'
             });
+        }
+        if (updates.titleTranslations || updates.descriptionTranslations) {
+            updates.titleTranslations = {
+                vi: updates.titleTranslations?.vi || updates.title || campaign.titleTranslations?.vi || campaign.title || '',
+                'zh-TW': updates.titleTranslations?.['zh-TW'] || campaign.titleTranslations?.['zh-TW'] || ''
+            };
+            updates.descriptionTranslations = {
+                vi: updates.descriptionTranslations?.vi || updates.description || campaign.descriptionTranslations?.vi || campaign.description || '',
+                'zh-TW': updates.descriptionTranslations?.['zh-TW'] || campaign.descriptionTranslations?.['zh-TW'] || ''
+            };
+            updates.title = updates.titleTranslations.vi || campaign.title;
+            updates.description = updates.descriptionTranslations.vi || campaign.description;
         }
         // Don't allow updates if campaign is active and has votes
         if (campaign.status === 'active') {
@@ -366,7 +403,7 @@ exports.deleteVotingCampaign = deleteVotingCampaign;
 const addVoteEntry = async (req, res) => {
     try {
         const { campaignId } = req.params;
-        const { title, description, imageUrl, imageUrls, videoUrl } = req.body;
+        const { title, description, titleTranslations, descriptionTranslations, imageUrl, imageUrls, videoUrl } = req.body;
         const userId = req.user.id;
         if (!mongoose_1.default.Types.ObjectId.isValid(campaignId)) {
             return res.status(400).json({
@@ -389,8 +426,16 @@ const addVoteEntry = async (req, res) => {
         }
         const entry = new vote_entry_1.default({
             campaignId,
-            title,
-            description,
+            title: titleTranslations?.vi || title,
+            description: descriptionTranslations?.vi || description,
+            titleTranslations: {
+                vi: titleTranslations?.vi || title || '',
+                'zh-TW': titleTranslations?.['zh-TW'] || ''
+            },
+            descriptionTranslations: {
+                vi: descriptionTranslations?.vi || description || '',
+                'zh-TW': descriptionTranslations?.['zh-TW'] || ''
+            },
             imageUrl: imageUrl || '',
             imageUrls: imageUrls || [],
             videoUrl: videoUrl || '',
@@ -416,7 +461,26 @@ exports.addVoteEntry = addVoteEntry;
 const updateVoteEntry = async (req, res) => {
     try {
         const { entryId } = req.params;
-        const updates = req.body;
+        const updates = { ...req.body };
+        const existingEntry = await vote_entry_1.default.findById(entryId);
+        if (!existingEntry) {
+            return res.status(404).json({
+                success: false,
+                message: 'Entry not found'
+            });
+        }
+        if (updates.titleTranslations || updates.descriptionTranslations) {
+            updates.titleTranslations = {
+                vi: updates.titleTranslations?.vi || updates.title || existingEntry.titleTranslations?.vi || existingEntry.title || '',
+                'zh-TW': updates.titleTranslations?.['zh-TW'] || existingEntry.titleTranslations?.['zh-TW'] || ''
+            };
+            updates.descriptionTranslations = {
+                vi: updates.descriptionTranslations?.vi || updates.description || existingEntry.descriptionTranslations?.vi || existingEntry.description || '',
+                'zh-TW': updates.descriptionTranslations?.['zh-TW'] || existingEntry.descriptionTranslations?.['zh-TW'] || ''
+            };
+            updates.title = updates.titleTranslations.vi || existingEntry.title;
+            updates.description = updates.descriptionTranslations.vi || existingEntry.description;
+        }
         if (!mongoose_1.default.Types.ObjectId.isValid(entryId)) {
             return res.status(400).json({
                 success: false,
@@ -424,12 +488,6 @@ const updateVoteEntry = async (req, res) => {
             });
         }
         const entry = await vote_entry_1.default.findByIdAndUpdate(entryId, updates, { new: true, runValidators: true }).populate('submittedBy', 'name email');
-        if (!entry) {
-            return res.status(404).json({
-                success: false,
-                message: 'Entry not found'
-            });
-        }
         res.json({
             success: true,
             message: 'Entry updated successfully',

@@ -3,6 +3,14 @@ import mongoose, { Schema, models, model, Document } from 'mongoose';
 interface IVotingCampaign extends Document {
   title: string;
   description: string;
+  titleTranslations?: {
+    vi?: string;
+    'zh-TW'?: string;
+  };
+  descriptionTranslations?: {
+    vi?: string;
+    'zh-TW'?: string;
+  };
   imageUrl?: string;
   startDate: Date;
   endDate: Date;
@@ -31,6 +39,14 @@ const VotingCampaignSchema = new Schema({
     type: String,
     required: true,
     trim: true
+  },
+  titleTranslations: {
+    vi: { type: String, default: '' },
+    'zh-TW': { type: String, default: '' }
+  },
+  descriptionTranslations: {
+    vi: { type: String, default: '' },
+    'zh-TW': { type: String, default: '' }
   },
   imageUrl: {
     type: String,

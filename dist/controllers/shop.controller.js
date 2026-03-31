@@ -11,16 +11,18 @@ const SuggestionPackage_1 = __importDefault(require("../models/SuggestionPackage
 const Branch_1 = __importDefault(require("../models/Branch"));
 const PaymentConfig_1 = __importDefault(require("../models/PaymentConfig"));
 const GiftCampaign_1 = __importDefault(require("../models/GiftCampaign"));
+const language_1 = require("../utils/language");
 // Get all products for shop (public)
 const getShopProducts = async (req, res) => {
     try {
+        const lang = (0, language_1.resolveLanguageFromRequest)(req);
         const { page = 1, limit = 12, search = '', category = '', minPrice = '', maxPrice = '', sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
         const query = { isActive: true };
         if (search) {
             const searchStr = String(search);
             query.$or = [
-                { name: { $regex: searchStr, $options: 'i' } },
-                { description: { $regex: searchStr, $options: 'i' } },
+                { [`nameTranslations.${lang}`]: { $regex: searchStr, $options: 'i' } },
+                { [`descriptionTranslations.${lang}`]: { $regex: searchStr, $options: 'i' } },
                 { tags: { $in: [new RegExp(searchStr, 'i')] } }
             ];
         }
@@ -41,10 +43,24 @@ const getShopProducts = async (req, res) => {
             .sort(sortOptions)
             .limit(Number(limit) * 1)
             .skip((Number(page) - 1) * Number(limit));
+        const localizedProducts = products
+            .map((product) => {
+            const p = product.toObject();
+            const localizedName = (0, language_1.pickLocalizedText)(lang, p.nameTranslations, p.name || '');
+            const localizedDescription = (0, language_1.pickLocalizedText)(lang, p.descriptionTranslations, p.description || '');
+            if (!localizedName || !localizedDescription)
+                return null;
+            return {
+                ...p,
+                name: localizedName,
+                description: localizedDescription
+            };
+        })
+            .filter(Boolean);
         const total = await Product_1.default.countDocuments(query);
         res.json({
             success: true,
-            data: products,
+            data: localizedProducts,
             pagination: {
                 current: Number(page),
                 pages: Math.ceil(total / Number(limit)),
@@ -61,11 +77,17 @@ exports.getShopProducts = getShopProducts;
 // Get single product for shop
 const getShopProductById = async (req, res) => {
     try {
+        const lang = (0, language_1.resolveLanguageFromRequest)(req);
         const { id } = req.params;
         const product = await Product_1.default.findOne({ _id: id, isActive: true })
             .select('-createdBy -metaTitle -metaDescription');
         if (!product) {
             return res.status(404).json({ success: false, message: 'Product not found' });
+        }
+        const localizedName = (0, language_1.pickLocalizedText)(lang, product.nameTranslations, product.name || '');
+        const localizedDescription = (0, language_1.pickLocalizedText)(lang, product.descriptionTranslations, product.description || '');
+        if (!localizedName || !localizedDescription) {
+            return res.status(404).json({ success: false, message: 'Product not found for language' });
         }
         // Need 'Review' model imported from somewhere if not already
         // Assuming assuming Review is exported from models/Review
@@ -94,6 +116,8 @@ const getShopProductById = async (req, res) => {
             success: true,
             data: {
                 ...product.toObject(),
+                name: localizedName,
+                description: localizedDescription,
                 averageRating: reviewStats.averageRating,
                 totalReviews: reviewStats.totalReviews,
                 giftCampaigns
@@ -127,6 +151,7 @@ exports.getProductCategories = getProductCategories;
 // Get featured products
 const getFeaturedProducts = async (req, res) => {
     try {
+        const lang = (0, language_1.resolveLanguageFromRequest)(req);
         const { limit = 8 } = req.query;
         const products = await Product_1.default.find({
             isActive: true,
@@ -135,7 +160,17 @@ const getFeaturedProducts = async (req, res) => {
             .select('-createdBy -metaTitle -metaDescription')
             .sort({ createdAt: -1 })
             .limit(Number(limit));
-        res.json({ success: true, data: products });
+        const localizedProducts = products
+            .map((product) => {
+            const p = product.toObject();
+            const localizedName = (0, language_1.pickLocalizedText)(lang, p.nameTranslations, p.name || '');
+            const localizedDescription = (0, language_1.pickLocalizedText)(lang, p.descriptionTranslations, p.description || '');
+            if (!localizedName || !localizedDescription)
+                return null;
+            return { ...p, name: localizedName, description: localizedDescription };
+        })
+            .filter(Boolean);
+        res.json({ success: true, data: localizedProducts });
     }
     catch (error) {
         console.error('Error getting featured products:', error);
@@ -212,6 +247,7 @@ exports.validateCoupon = validateCoupon;
 // Search products
 const searchProducts = async (req, res) => {
     try {
+        const lang = (0, language_1.resolveLanguageFromRequest)(req);
         const { q, limit = 10 } = req.query;
         if (!q) {
             return res.status(400).json({
@@ -222,14 +258,23 @@ const searchProducts = async (req, res) => {
         const products = await Product_1.default.find({
             isActive: true,
             $or: [
-                { name: { $regex: q, $options: 'i' } },
-                { description: { $regex: q, $options: 'i' } },
+                { [`nameTranslations.${lang}`]: { $regex: q, $options: 'i' } },
+                { [`descriptionTranslations.${lang}`]: { $regex: q, $options: 'i' } },
                 { tags: { $in: [new RegExp(q, 'i')] } }
             ]
         })
             .select('name images price originalPrice category')
             .limit(Number(limit));
-        res.json({ success: true, data: products });
+        const localizedProducts = products
+            .map((product) => {
+            const p = product.toObject();
+            const localizedName = (0, language_1.pickLocalizedText)(lang, p.nameTranslations, p.name || '');
+            if (!localizedName)
+                return null;
+            return { ...p, name: localizedName };
+        })
+            .filter(Boolean);
+        res.json({ success: true, data: localizedProducts });
     }
     catch (error) {
         console.error('Error searching products:', error);

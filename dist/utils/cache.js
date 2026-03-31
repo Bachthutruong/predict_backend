@@ -2,32 +2,35 @@
 // Cache utility for managing prediction cache across different routes
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.isCacheValid = exports.clearCache = exports.setCache = exports.getCache = exports.CACHE_DURATION = void 0;
-// Simple in-memory cache for active predictions (5 minutes)
-let activePredictionsCache = null;
-let cacheTimestamp = 0;
+const predictionCacheByLanguage = {};
 exports.CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-const getCache = () => ({
-    cache: activePredictionsCache,
-    timestamp: cacheTimestamp,
+const getCache = (lang = 'vi') => ({
+    cache: predictionCacheByLanguage[lang]?.data ?? null,
+    timestamp: predictionCacheByLanguage[lang]?.timestamp ?? 0,
     isExpired: () => {
         const now = Date.now();
-        return !activePredictionsCache || (now - cacheTimestamp) >= exports.CACHE_DURATION;
+        const bucket = predictionCacheByLanguage[lang];
+        return !bucket || (now - bucket.timestamp) >= exports.CACHE_DURATION;
     }
 });
 exports.getCache = getCache;
-const setCache = (data) => {
-    activePredictionsCache = data;
-    cacheTimestamp = Date.now();
+const setCache = (data, lang = 'vi') => {
+    predictionCacheByLanguage[lang] = {
+        data,
+        timestamp: Date.now()
+    };
 };
 exports.setCache = setCache;
 const clearCache = () => {
-    activePredictionsCache = null;
-    cacheTimestamp = 0;
+    Object.keys(predictionCacheByLanguage).forEach((lang) => {
+        delete predictionCacheByLanguage[lang];
+    });
 };
 exports.clearCache = clearCache;
-const isCacheValid = () => {
+const isCacheValid = (lang = 'vi') => {
     const now = Date.now();
-    return activePredictionsCache && (now - cacheTimestamp) < exports.CACHE_DURATION;
+    const bucket = predictionCacheByLanguage[lang];
+    return Boolean(bucket?.data) && (now - bucket.timestamp) < exports.CACHE_DURATION;
 };
 exports.isCacheValid = isCacheValid;
 //# sourceMappingURL=cache.js.map

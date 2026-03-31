@@ -14,6 +14,14 @@ const VotingCampaignSchema = new mongoose_1.Schema({
         required: true,
         trim: true
     },
+    titleTranslations: {
+        vi: { type: String, default: '' },
+        'zh-TW': { type: String, default: '' }
+    },
+    descriptionTranslations: {
+        vi: { type: String, default: '' },
+        'zh-TW': { type: String, default: '' }
+    },
     imageUrl: {
         type: String,
         default: ''

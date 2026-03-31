@@ -95,6 +95,7 @@ app.use((0, cors_1.default)({
     allowedHeaders: [
         'Content-Type',
         'Authorization',
+        'X-Language',
         'X-Guest-Id',
         'X-WC-Webhook-Signature',
         'X-WC-Webhook-Source',

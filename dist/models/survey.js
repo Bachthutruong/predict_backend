@@ -3,10 +3,18 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = require("mongoose");
 const SurveyOptionSchema = new mongoose_1.Schema({
     text: { type: String, required: true },
+    textTranslations: {
+        vi: { type: String, default: '' },
+        'zh-TW': { type: String, default: '' }
+    },
     antiFraudGroupId: { type: String },
 });
 const SurveyQuestionSchema = new mongoose_1.Schema({
     text: { type: String, required: true },
+    textTranslations: {
+        vi: { type: String, default: '' },
+        'zh-TW': { type: String, default: '' }
+    },
     type: {
         type: String,
         enum: ['short-text', 'long-text', 'single-choice', 'multiple-choice'],
@@ -19,6 +27,14 @@ const SurveyQuestionSchema = new mongoose_1.Schema({
 const SurveySchema = new mongoose_1.Schema({
     title: { type: String, required: true },
     description: { type: String, required: true },
+    titleTranslations: {
+        vi: { type: String, default: '' },
+        'zh-TW': { type: String, default: '' }
+    },
+    descriptionTranslations: {
+        vi: { type: String, default: '' },
+        'zh-TW': { type: String, default: '' }
+    },
     imageUrl: { type: String },
     status: {
         type: String,

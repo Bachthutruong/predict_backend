@@ -120,14 +120,12 @@ const createIndexes = async () => {
             // user_1: unique only when user is ObjectId (not null)
             await Cart_1.default.collection.createIndex({ user: 1 }, {
                 unique: true,
-                sparse: true,
                 partialFilterExpression: { user: { $type: 'objectId' } },
                 name: 'user_1'
             });
             // guestId_1: unique only when guestId exists and is not empty
             await Cart_1.default.collection.createIndex({ guestId: 1 }, {
                 unique: true,
-                sparse: true,
                 partialFilterExpression: { guestId: { $exists: true, $type: 'string', $ne: '' } },
                 name: 'guestId_1'
             });

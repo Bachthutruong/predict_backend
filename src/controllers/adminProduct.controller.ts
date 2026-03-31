@@ -84,6 +84,8 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
     const {
       name,
       description,
+      nameTranslations = {},
+      descriptionTranslations = {},
       price,
       originalPrice,
       images = [],
@@ -106,9 +108,31 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
       shippingWeight = 0
     } = req.body;
 
+    const normalizedNameTranslations = {
+      vi: String(nameTranslations?.vi || name || '').trim(),
+      'zh-TW': String(nameTranslations?.['zh-TW'] || '').trim()
+    };
+    const normalizedDescriptionTranslations = {
+      vi: String(descriptionTranslations?.vi || description || '').trim(),
+      'zh-TW': String(descriptionTranslations?.['zh-TW'] || '').trim()
+    };
+
+    // Keep required legacy fields populated for schema validation.
+    const resolvedName =
+      normalizedNameTranslations.vi ||
+      normalizedNameTranslations['zh-TW'] ||
+      String(name || '').trim();
+    const resolvedDescription =
+      normalizedDescriptionTranslations.vi ||
+      normalizedDescriptionTranslations['zh-TW'] ||
+      String(description || '').trim();
+    const safeDescription = resolvedDescription || resolvedName;
+
     const product = new Product({
-      name,
-      description,
+      name: resolvedName,
+      description: safeDescription,
+      nameTranslations: normalizedNameTranslations,
+      descriptionTranslations: normalizedDescriptionTranslations,
       price,
       originalPrice,
       images: images as string[],
@@ -149,6 +173,8 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
     const allowedFields = [
       'name',
       'description',
+      'nameTranslations',
+      'descriptionTranslations',
       'price',
       'originalPrice',
       'images',
@@ -178,6 +204,39 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    const normalizeText = (value: unknown) => String(value || '').trim();
+    const incomingNameTranslations = (updateData as any).nameTranslations || {};
+    const incomingDescriptionTranslations = (updateData as any).descriptionTranslations || {};
+
+    const currentProduct = await Product.findById(id).select('name description nameTranslations descriptionTranslations');
+    if (!currentProduct) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    const mergedNameTranslations = {
+      vi: normalizeText(incomingNameTranslations.vi || (currentProduct as any).nameTranslations?.vi || (updateData as any).name || currentProduct.name),
+      'zh-TW': normalizeText(incomingNameTranslations['zh-TW'] || (currentProduct as any).nameTranslations?.['zh-TW'] || '')
+    };
+    const mergedDescriptionTranslations = {
+      vi: normalizeText(incomingDescriptionTranslations.vi || (currentProduct as any).descriptionTranslations?.vi || (updateData as any).description || currentProduct.description),
+      'zh-TW': normalizeText(incomingDescriptionTranslations['zh-TW'] || (currentProduct as any).descriptionTranslations?.['zh-TW'] || '')
+    };
+
+    const resolvedName =
+      mergedNameTranslations.vi ||
+      mergedNameTranslations['zh-TW'] ||
+      normalizeText((updateData as any).name || currentProduct.name);
+    const resolvedDescription =
+      mergedDescriptionTranslations.vi ||
+      mergedDescriptionTranslations['zh-TW'] ||
+      normalizeText((updateData as any).description || currentProduct.description);
+    const safeDescription = resolvedDescription || resolvedName;
+
+    (updateData as any).nameTranslations = mergedNameTranslations;
+    (updateData as any).descriptionTranslations = mergedDescriptionTranslations;
+    (updateData as any).name = resolvedName;
+    (updateData as any).description = safeDescription;
+
     // Explicitly block fields that should never be overwritten from client payload
     delete (updateData as any)._id;
     delete (updateData as any).id;
@@ -190,10 +249,6 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
       updateData,
       { new: true, runValidators: true }
     ).populate('createdBy', 'name email');
-
-    if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
-    }
 
     res.json({ success: true, data: product });
   } catch (error) {

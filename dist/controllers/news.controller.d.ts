@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
-export declare const getNewsList: (_req: AuthRequest, res: Response) => Promise<void>;
+export declare const getNewsList: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const getNewsBySlug: (req: AuthRequest, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 export declare const getManageNewsList: (_req: AuthRequest, res: Response) => Promise<void>;
 export declare const getManageNewsById: (req: AuthRequest, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;

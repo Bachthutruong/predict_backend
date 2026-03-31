@@ -7,10 +7,12 @@ import SuggestionPackage from '../models/SuggestionPackage';
 import Branch from '../models/Branch';
 import PaymentConfig from '../models/PaymentConfig';
 import GiftCampaign from '../models/GiftCampaign';
+import { pickLocalizedText, resolveLanguageFromRequest } from '../utils/language';
 
 // Get all products for shop (public)
 export const getShopProducts = async (req: AuthRequest, res: Response) => {
   try {
+    const lang = resolveLanguageFromRequest(req);
     const {
       page = 1,
       limit = 12,
@@ -27,8 +29,8 @@ export const getShopProducts = async (req: AuthRequest, res: Response) => {
     if (search) {
       const searchStr = String(search);
       query.$or = [
-        { name: { $regex: searchStr, $options: 'i' } },
-        { description: { $regex: searchStr, $options: 'i' } },
+        { [`nameTranslations.${lang}`]: { $regex: searchStr, $options: 'i' } },
+        { [`descriptionTranslations.${lang}`]: { $regex: searchStr, $options: 'i' } },
         { tags: { $in: [new RegExp(searchStr, 'i')] } }
       ];
     }
@@ -52,11 +54,25 @@ export const getShopProducts = async (req: AuthRequest, res: Response) => {
       .limit(Number(limit) * 1)
       .skip((Number(page) - 1) * Number(limit));
 
+    const localizedProducts = products
+      .map((product: any) => {
+        const p = product.toObject();
+        const localizedName = pickLocalizedText(lang, p.nameTranslations, p.name || '');
+        const localizedDescription = pickLocalizedText(lang, p.descriptionTranslations, p.description || '');
+        if (!localizedName || !localizedDescription) return null;
+        return {
+          ...p,
+          name: localizedName,
+          description: localizedDescription
+        };
+      })
+      .filter(Boolean);
+
     const total = await Product.countDocuments(query);
 
     res.json({
       success: true,
-      data: products,
+      data: localizedProducts,
       pagination: {
         current: Number(page),
         pages: Math.ceil(total / Number(limit)),
@@ -72,12 +88,18 @@ export const getShopProducts = async (req: AuthRequest, res: Response) => {
 // Get single product for shop
 export const getShopProductById = async (req: AuthRequest, res: Response) => {
   try {
+    const lang = resolveLanguageFromRequest(req);
     const { id } = req.params;
     const product = await Product.findOne({ _id: id, isActive: true })
       .select('-createdBy -metaTitle -metaDescription');
 
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+    const localizedName = pickLocalizedText(lang, (product as any).nameTranslations, (product as any).name || '');
+    const localizedDescription = pickLocalizedText(lang, (product as any).descriptionTranslations, (product as any).description || '');
+    if (!localizedName || !localizedDescription) {
+      return res.status(404).json({ success: false, message: 'Product not found for language' });
     }
 
     // Need 'Review' model imported from somewhere if not already
@@ -112,6 +134,8 @@ export const getShopProductById = async (req: AuthRequest, res: Response) => {
       success: true,
       data: {
         ...product.toObject(),
+        name: localizedName,
+        description: localizedDescription,
         averageRating: reviewStats.averageRating,
         totalReviews: reviewStats.totalReviews,
         giftCampaigns
@@ -143,6 +167,7 @@ export const getProductCategories = async (req: AuthRequest, res: Response) => {
 // Get featured products
 export const getFeaturedProducts = async (req: AuthRequest, res: Response) => {
   try {
+    const lang = resolveLanguageFromRequest(req);
     const { limit = 8 } = req.query;
 
     const products = await Product.find({
@@ -153,7 +178,16 @@ export const getFeaturedProducts = async (req: AuthRequest, res: Response) => {
       .sort({ createdAt: -1 })
       .limit(Number(limit));
 
-    res.json({ success: true, data: products });
+    const localizedProducts = products
+      .map((product: any) => {
+        const p = product.toObject();
+        const localizedName = pickLocalizedText(lang, p.nameTranslations, p.name || '');
+        const localizedDescription = pickLocalizedText(lang, p.descriptionTranslations, p.description || '');
+        if (!localizedName || !localizedDescription) return null;
+        return { ...p, name: localizedName, description: localizedDescription };
+      })
+      .filter(Boolean);
+    res.json({ success: true, data: localizedProducts });
   } catch (error) {
     console.error('Error getting featured products:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
@@ -231,6 +265,7 @@ export const validateCoupon = async (req: AuthRequest, res: Response) => {
 // Search products
 export const searchProducts = async (req: AuthRequest, res: Response) => {
   try {
+    const lang = resolveLanguageFromRequest(req);
     const { q, limit = 10 } = req.query;
 
     if (!q) {
@@ -243,15 +278,23 @@ export const searchProducts = async (req: AuthRequest, res: Response) => {
     const products = await Product.find({
       isActive: true,
       $or: [
-        { name: { $regex: q, $options: 'i' } },
-        { description: { $regex: q, $options: 'i' } },
+        { [`nameTranslations.${lang}`]: { $regex: q, $options: 'i' } },
+        { [`descriptionTranslations.${lang}`]: { $regex: q, $options: 'i' } },
         { tags: { $in: [new RegExp(q as string, 'i')] } }
       ]
     })
       .select('name images price originalPrice category')
       .limit(Number(limit));
 
-    res.json({ success: true, data: products });
+    const localizedProducts = products
+      .map((product: any) => {
+        const p = product.toObject();
+        const localizedName = pickLocalizedText(lang, p.nameTranslations, p.name || '');
+        if (!localizedName) return null;
+        return { ...p, name: localizedName };
+      })
+      .filter(Boolean);
+    res.json({ success: true, data: localizedProducts });
   } catch (error) {
     console.error('Error searching products:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });

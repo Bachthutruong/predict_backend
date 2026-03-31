@@ -5,10 +5,12 @@ import UserVote from '../models/user-vote';
 import User from '../models/user';
 import PointTransaction from '../models/point-transaction';
 import mongoose from 'mongoose';
+import { pickLocalizedText, resolveLanguageFromRequest } from '../utils/language';
 
 // Get all active voting campaigns for public viewing
 export const getActiveVotingCampaigns = async (req: Request, res: Response) => {
   try {
+    const lang = resolveLanguageFromRequest(req);
     const { page = 1, limit = 10, search, status } = req.query;
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
@@ -78,7 +80,7 @@ export const getActiveVotingCampaigns = async (req: Request, res: Response) => {
       .limit(limitNum);
 
     // Add entry count and dynamic status to each campaign
-    const campaignsWithStats = await Promise.all(
+    const campaignsWithStatsRaw = await Promise.all(
       campaigns.map(async (campaign) => {
         const entryCount = await VoteEntry.countDocuments({ 
           campaignId: campaign._id,
@@ -102,8 +104,11 @@ export const getActiveVotingCampaigns = async (req: Request, res: Response) => {
           }
         }
 
+        const campaignObj = campaign.toJSON();
         return {
-          ...campaign.toJSON(),
+          ...campaignObj,
+          title: pickLocalizedText(lang, campaignObj.titleTranslations, ''),
+          description: pickLocalizedText(lang, campaignObj.descriptionTranslations, ''),
           status: dynamicStatus,
           entryCount,
           totalVotes,
@@ -113,6 +118,7 @@ export const getActiveVotingCampaigns = async (req: Request, res: Response) => {
         };
       })
     );
+    const campaignsWithStats = campaignsWithStatsRaw.filter((campaign) => Boolean(campaign.title && campaign.description));
 
     res.json({
       success: true,
@@ -136,6 +142,7 @@ export const getActiveVotingCampaigns = async (req: Request, res: Response) => {
 // Get single voting campaign with entries (public view)
 export const getVotingCampaignDetail = async (req: Request, res: Response) => {
   try {
+    const lang = resolveLanguageFromRequest(req);
     const { id } = req.params;
     const { sortBy = 'random', page = 1, limit = 20 } = req.query;
     
@@ -234,7 +241,7 @@ export const getVotingCampaignDetail = async (req: Request, res: Response) => {
     const entries = await entriesQuery;
 
     // Get vote data with masked usernames for each entry
-    const entriesWithVotes = await Promise.all(
+    const entriesWithVotesRaw = await Promise.all(
       entries.map(async (entry) => {
         const votes = await UserVote.find({ entryId: entry._id || entry.id })
           .populate('userId', 'name')
@@ -247,13 +254,17 @@ export const getVotingCampaignDetail = async (req: Request, res: Response) => {
           userName: maskUsername(vote.userId?.name || 'Anonymous')
         }));
 
+        const entryObject = entry.toJSON ? entry.toJSON() : entry;
         return {
-          ...entry.toJSON ? entry.toJSON() : entry,
+          ...entryObject,
+          title: pickLocalizedText(lang, entryObject.titleTranslations, ''),
+          description: pickLocalizedText(lang, entryObject.descriptionTranslations, ''),
           votes: maskedVotes,
           voteCount: votes.length
         };
       })
     );
+    const entriesWithVotes = entriesWithVotesRaw.filter((entry) => Boolean(entry.title && entry.description));
 
     // Get user's vote status if logged in
     let userVotes = [];
@@ -271,11 +282,24 @@ export const getVotingCampaignDetail = async (req: Request, res: Response) => {
       status: 'approved'
     });
 
+    const campaignObject = campaign.toJSON();
+    const localizedCampaign = {
+      ...campaignObject,
+      title: pickLocalizedText(lang, campaignObject.titleTranslations, ''),
+      description: pickLocalizedText(lang, campaignObject.descriptionTranslations, ''),
+    };
+    if (!localizedCampaign.title || !localizedCampaign.description) {
+      return res.status(404).json({
+        success: false,
+        message: 'Campaign not found or not active'
+      });
+    }
+
     res.json({
       success: true,
       data: {
         campaign: {
-          ...campaign.toJSON(),
+          ...localizedCampaign,
           status: dynamicStatus,
           isVotingOpen: campaign.isVotingOpen(),
           isVotingCompleted: campaign.isVotingCompleted(),

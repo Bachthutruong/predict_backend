@@ -1,10 +1,18 @@
 import { Document, Types } from 'mongoose';
 export interface ISurveyOption extends Document {
     text: string;
+    textTranslations?: {
+        vi?: string;
+        'zh-TW'?: string;
+    };
     antiFraudGroupId?: string;
 }
 export interface ISurveyQuestion extends Document {
     text: string;
+    textTranslations?: {
+        vi?: string;
+        'zh-TW'?: string;
+    };
     type: 'short-text' | 'long-text' | 'single-choice' | 'multiple-choice';
     isRequired: boolean;
     options: ISurveyOption[];
@@ -13,6 +21,14 @@ export interface ISurveyQuestion extends Document {
 export interface ISurvey extends Document {
     title: string;
     description: string;
+    titleTranslations?: {
+        vi?: string;
+        'zh-TW'?: string;
+    };
+    descriptionTranslations?: {
+        vi?: string;
+        'zh-TW'?: string;
+    };
     imageUrl?: string;
     status: 'draft' | 'published' | 'closed';
     pointsAwarded: number;

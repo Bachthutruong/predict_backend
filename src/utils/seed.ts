@@ -101,7 +101,6 @@ export const createIndexes = async () => {
         { user: 1 }, 
         { 
           unique: true, 
-          sparse: true, 
           partialFilterExpression: { user: { $type: 'objectId' } },
           name: 'user_1'
         }
@@ -111,7 +110,6 @@ export const createIndexes = async () => {
         { guestId: 1 }, 
         { 
           unique: true, 
-          sparse: true, 
           partialFilterExpression: { guestId: { $exists: true, $type: 'string', $ne: '' } },
           name: 'guestId_1'
         }

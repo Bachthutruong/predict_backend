@@ -4,6 +4,14 @@ interface IVoteEntry extends Document {
   campaignId: mongoose.Types.ObjectId;
   title: string;
   description: string;
+  titleTranslations?: {
+    vi?: string;
+    'zh-TW'?: string;
+  };
+  descriptionTranslations?: {
+    vi?: string;
+    'zh-TW'?: string;
+  };
   imageUrl?: string;
   imageUrls?: string[]; // Multiple images for gallery
   videoUrl?: string; // YouTube or any video link
@@ -36,6 +44,14 @@ const VoteEntrySchema = new Schema({
     required: true,
     trim: true,
     maxlength: 2000
+  },
+  titleTranslations: {
+    vi: { type: String, default: '' },
+    'zh-TW': { type: String, default: '' }
+  },
+  descriptionTranslations: {
+    vi: { type: String, default: '' },
+    'zh-TW': { type: String, default: '' }
   },
   imageUrl: {
     type: String,

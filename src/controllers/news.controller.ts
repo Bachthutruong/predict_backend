@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import NewsArticle from '../models/NewsArticle';
+import { pickLocalizedText, resolveLanguageFromRequest } from '../utils/language';
 
 const slugify = (value: string) =>
   value
@@ -21,12 +22,24 @@ const generateUniqueSlug = async (title: string, excludeId?: string) => {
   }
 };
 
-export const getNewsList = async (_req: AuthRequest, res: Response) => {
+export const getNewsList = async (req: AuthRequest, res: Response) => {
   try {
+    const lang = resolveLanguageFromRequest(req as any);
     const articles = await NewsArticle.find({ status: 'published' })
       .populate('author', 'name')
       .sort({ publishedAt: -1, createdAt: -1 });
-    res.json({ success: true, data: articles });
+    const localized = articles
+      .map((article: any) => {
+        const articleObj = article.toObject();
+        return {
+          ...articleObj,
+          title: pickLocalizedText(lang, articleObj.titleTranslations, ''),
+          summary: pickLocalizedText(lang, articleObj.summaryTranslations, ''),
+          content: pickLocalizedText(lang, articleObj.contentTranslations, '')
+        };
+      })
+      .filter((article) => Boolean(article.title && article.content));
+    res.json({ success: true, data: localized });
   } catch (error) {
     console.error('Error getting news list:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
@@ -35,9 +48,20 @@ export const getNewsList = async (_req: AuthRequest, res: Response) => {
 
 export const getNewsBySlug = async (req: AuthRequest, res: Response) => {
   try {
+    const lang = resolveLanguageFromRequest(req as any);
     const article = await NewsArticle.findOne({ slug: req.params.slug, status: 'published' }).populate('author', 'name');
     if (!article) return res.status(404).json({ success: false, message: 'News article not found' });
-    res.json({ success: true, data: article });
+    const articleObj = article.toObject();
+    const localized = {
+      ...articleObj,
+      title: pickLocalizedText(lang, articleObj.titleTranslations, ''),
+      summary: pickLocalizedText(lang, articleObj.summaryTranslations, ''),
+      content: pickLocalizedText(lang, articleObj.contentTranslations, '')
+    };
+    if (!localized.title || !localized.content) {
+      return res.status(404).json({ success: false, message: 'News article not found' });
+    }
+    res.json({ success: true, data: localized });
   } catch (error) {
     console.error('Error getting news:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
@@ -67,16 +91,30 @@ export const getManageNewsById = async (req: AuthRequest, res: Response) => {
 
 export const createNews = async (req: AuthRequest, res: Response) => {
   try {
-    const { title, summary = '', content, coverImage = '', status = 'draft' } = req.body;
-    if (!title || !content) {
+    const { title, summary = '', content, titleTranslations, summaryTranslations, contentTranslations, coverImage = '', status = 'draft' } = req.body;
+    const viTitle = titleTranslations?.vi || title;
+    const viContent = contentTranslations?.vi || content;
+    if (!viTitle || !viContent) {
       return res.status(400).json({ success: false, message: 'Title and content are required' });
     }
-    const slug = await generateUniqueSlug(String(title));
+    const slug = await generateUniqueSlug(String(viTitle));
     const article = new NewsArticle({
-      title,
+      title: viTitle,
+      titleTranslations: {
+        vi: viTitle || '',
+        'zh-TW': titleTranslations?.['zh-TW'] || ''
+      },
       slug,
-      summary,
-      content,
+      summary: summaryTranslations?.vi || summary,
+      summaryTranslations: {
+        vi: summaryTranslations?.vi || summary || '',
+        'zh-TW': summaryTranslations?.['zh-TW'] || ''
+      },
+      content: viContent,
+      contentTranslations: {
+        vi: viContent || '',
+        'zh-TW': contentTranslations?.['zh-TW'] || ''
+      },
       coverImage,
       status,
       publishedAt: status === 'published' ? new Date() : undefined,
@@ -101,6 +139,27 @@ export const updateNews = async (req: AuthRequest, res: Response) => {
       if (Object.prototype.hasOwnProperty.call(req.body, key)) {
         updateData[key] = (req.body as Record<string, unknown>)[key];
       }
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'titleTranslations') || Object.prototype.hasOwnProperty.call(req.body, 'contentTranslations') || Object.prototype.hasOwnProperty.call(req.body, 'summaryTranslations')) {
+      const incoming = req.body as Record<string, any>;
+      const resolvedTitleTranslations = {
+        vi: incoming.titleTranslations?.vi || incoming.title || existing.titleTranslations?.vi || existing.title || '',
+        'zh-TW': incoming.titleTranslations?.['zh-TW'] || existing.titleTranslations?.['zh-TW'] || ''
+      };
+      const resolvedSummaryTranslations = {
+        vi: incoming.summaryTranslations?.vi || incoming.summary || existing.summaryTranslations?.vi || existing.summary || '',
+        'zh-TW': incoming.summaryTranslations?.['zh-TW'] || existing.summaryTranslations?.['zh-TW'] || ''
+      };
+      const resolvedContentTranslations = {
+        vi: incoming.contentTranslations?.vi || incoming.content || existing.contentTranslations?.vi || existing.content || '',
+        'zh-TW': incoming.contentTranslations?.['zh-TW'] || existing.contentTranslations?.['zh-TW'] || ''
+      };
+      updateData.titleTranslations = resolvedTitleTranslations;
+      updateData.summaryTranslations = resolvedSummaryTranslations;
+      updateData.contentTranslations = resolvedContentTranslations;
+      updateData.title = resolvedTitleTranslations.vi;
+      updateData.summary = resolvedSummaryTranslations.vi;
+      updateData.content = resolvedContentTranslations.vi;
     }
     if (typeof updateData.title === 'string' && updateData.title !== existing.title) {
       updateData.slug = await generateUniqueSlug(updateData.title, existing._id.toString());

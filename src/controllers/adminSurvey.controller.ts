@@ -5,14 +5,36 @@ import User from '../models/user';
 import PointTransaction from '../models/point-transaction';
 import exceljs from 'exceljs';
 import mongoose from 'mongoose';
+import { pickLocalizedText, resolveLanguageFromRequest } from '../utils/language';
+
+const normalizeSurveyQuestions = (questions: any[] = []) => {
+  return questions.map((question) => ({
+    ...question,
+    textTranslations: {
+      vi: question?.textTranslations?.vi || question?.text || '',
+      'zh-TW': question?.textTranslations?.['zh-TW'] || ''
+    },
+    text: question?.textTranslations?.vi || question?.text || '',
+    options: (question?.options || []).map((option: any) => ({
+      ...option,
+      textTranslations: {
+        vi: option?.textTranslations?.vi || option?.text || '',
+        'zh-TW': option?.textTranslations?.['zh-TW'] || ''
+      },
+      text: option?.textTranslations?.vi || option?.text || ''
+    }))
+  }));
+};
 
 // @desc    Create a new survey
 // @route   POST /api/admin/surveys
 // @access  Private/Admin
 export const createSurvey = async (req: Request, res: Response) => {
-  const { title, description, pointsAwarded, endDate, questions, status, imageUrl }: {
+  const { title, description, titleTranslations, descriptionTranslations, pointsAwarded, endDate, questions, status, imageUrl }: {
     title: string;
     description:string;
+    titleTranslations?: Record<string, string>;
+    descriptionTranslations?: Record<string, string>;
     pointsAwarded: number;
     endDate?: Date;
     questions: ISurveyQuestion[];
@@ -39,11 +61,19 @@ export const createSurvey = async (req: Request, res: Response) => {
 
   try {
     const survey = new Survey({
-      title,
-      description,
+      title: titleTranslations?.vi || title,
+      description: descriptionTranslations?.vi || description,
+      titleTranslations: {
+        vi: titleTranslations?.vi || title || '',
+        'zh-TW': titleTranslations?.['zh-TW'] || ''
+      },
+      descriptionTranslations: {
+        vi: descriptionTranslations?.vi || description || '',
+        'zh-TW': descriptionTranslations?.['zh-TW'] || ''
+      },
       pointsAwarded,
       endDate,
-      questions,
+      questions: normalizeSurveyQuestions(questions as any[]),
       status,
       imageUrl,
       createdBy: (req as any).user.id, // Assuming user ID is available on request
@@ -65,8 +95,17 @@ export const createSurvey = async (req: Request, res: Response) => {
 // @access  Private/Admin
 export const getSurveys = async (req: Request, res: Response) => {
     try {
+        const lang = resolveLanguageFromRequest(req);
         const surveys = await Survey.find().sort({ createdAt: -1 });
-        res.json({ message: 'Surveys fetched successfully', data: surveys });
+        const localized = surveys.map((survey: any) => {
+          const surveyObj = survey.toObject();
+          return {
+            ...surveyObj,
+            title: pickLocalizedText(lang, surveyObj.titleTranslations, surveyObj.title),
+            description: pickLocalizedText(lang, surveyObj.descriptionTranslations, surveyObj.description)
+          };
+        });
+        res.json({ message: 'Surveys fetched successfully', data: localized });
     } catch (error) {
         console.error('Error fetching surveys:', error);
         res.status(500).json({ message: 'Server error' });
@@ -78,11 +117,29 @@ export const getSurveys = async (req: Request, res: Response) => {
 // @access  Private/Admin
 export const getSurveyById = async (req: Request, res: Response) => {
     try {
+        const lang = resolveLanguageFromRequest(req);
         const survey = await Survey.findById(req.params.id);
         if (!survey) {
             return res.status(404).json({ message: 'Survey not found' });
         }
-        res.json({ message: 'Survey fetched successfully', data: survey });
+        const surveyObj = survey.toObject();
+        const localizedQuestions = (surveyObj.questions || []).map((question: any) => ({
+          ...question,
+          text: pickLocalizedText(lang, question.textTranslations, question.text),
+          options: (question.options || []).map((option: any) => ({
+            ...option,
+            text: pickLocalizedText(lang, option.textTranslations, option.text)
+          }))
+        }));
+        res.json({
+          message: 'Survey fetched successfully',
+          data: {
+            ...surveyObj,
+            title: pickLocalizedText(lang, surveyObj.titleTranslations, surveyObj.title),
+            description: pickLocalizedText(lang, surveyObj.descriptionTranslations, surveyObj.description),
+            questions: localizedQuestions
+          }
+        });
     } catch (error) {
         console.error('Error fetching survey by ID:', error);
         res.status(500).json({ message: 'Server error' });
@@ -93,7 +150,7 @@ export const getSurveyById = async (req: Request, res: Response) => {
 // @route   PUT /api/admin/surveys/:id
 // @access  Private/Admin
 export const updateSurvey = async (req: Request, res: Response) => {
-    const { title, description, pointsAwarded, endDate, questions, status, imageUrl } = req.body;
+    const { title, description, titleTranslations, descriptionTranslations, pointsAwarded, endDate, questions, status, imageUrl } = req.body;
 
     try {
         const survey = await Survey.findById(req.params.id);
@@ -114,11 +171,24 @@ export const updateSurvey = async (req: Request, res: Response) => {
             }
         }
 
-        survey.title = title || survey.title;
-        survey.description = description || survey.description;
+        if (titleTranslations || descriptionTranslations) {
+            survey.titleTranslations = {
+              vi: titleTranslations?.vi || title || survey.titleTranslations?.vi || survey.title || '',
+              'zh-TW': titleTranslations?.['zh-TW'] || survey.titleTranslations?.['zh-TW'] || ''
+            } as any;
+            survey.descriptionTranslations = {
+              vi: descriptionTranslations?.vi || description || survey.descriptionTranslations?.vi || survey.description || '',
+              'zh-TW': descriptionTranslations?.['zh-TW'] || survey.descriptionTranslations?.['zh-TW'] || ''
+            } as any;
+            survey.title = (survey.titleTranslations as any).vi || survey.title;
+            survey.description = (survey.descriptionTranslations as any).vi || survey.description;
+        } else {
+            survey.title = title || survey.title;
+            survey.description = description || survey.description;
+        }
         survey.pointsAwarded = pointsAwarded ?? survey.pointsAwarded;
         survey.endDate = endDate;
-        survey.questions = questions || survey.questions;
+        survey.questions = questions ? normalizeSurveyQuestions(questions as any[]) : survey.questions;
         survey.status = status || survey.status;
         survey.imageUrl = imageUrl || survey.imageUrl;
 

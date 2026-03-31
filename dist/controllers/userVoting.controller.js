@@ -10,9 +10,11 @@ const user_vote_1 = __importDefault(require("../models/user-vote"));
 const user_1 = __importDefault(require("../models/user"));
 const point_transaction_1 = __importDefault(require("../models/point-transaction"));
 const mongoose_1 = __importDefault(require("mongoose"));
+const language_1 = require("../utils/language");
 // Get all active voting campaigns for public viewing
 const getActiveVotingCampaigns = async (req, res) => {
     try {
+        const lang = (0, language_1.resolveLanguageFromRequest)(req);
         const { page = 1, limit = 10, search, status } = req.query;
         const pageNum = parseInt(page);
         const limitNum = parseInt(limit);
@@ -80,7 +82,7 @@ const getActiveVotingCampaigns = async (req, res) => {
             .skip(skip)
             .limit(limitNum);
         // Add entry count and dynamic status to each campaign
-        const campaignsWithStats = await Promise.all(campaigns.map(async (campaign) => {
+        const campaignsWithStatsRaw = await Promise.all(campaigns.map(async (campaign) => {
             const entryCount = await vote_entry_1.default.countDocuments({
                 campaignId: campaign._id,
                 isActive: true,
@@ -102,8 +104,11 @@ const getActiveVotingCampaigns = async (req, res) => {
                     dynamicStatus = 'closed';
                 }
             }
+            const campaignObj = campaign.toJSON();
             return {
-                ...campaign.toJSON(),
+                ...campaignObj,
+                title: (0, language_1.pickLocalizedText)(lang, campaignObj.titleTranslations, ''),
+                description: (0, language_1.pickLocalizedText)(lang, campaignObj.descriptionTranslations, ''),
                 status: dynamicStatus,
                 entryCount,
                 totalVotes,
@@ -112,6 +117,7 @@ const getActiveVotingCampaigns = async (req, res) => {
                 remainingTime: campaign.getRemainingTime()
             };
         }));
+        const campaignsWithStats = campaignsWithStatsRaw.filter((campaign) => Boolean(campaign.title && campaign.description));
         res.json({
             success: true,
             data: campaignsWithStats,
@@ -135,6 +141,7 @@ exports.getActiveVotingCampaigns = getActiveVotingCampaigns;
 // Get single voting campaign with entries (public view)
 const getVotingCampaignDetail = async (req, res) => {
     try {
+        const lang = (0, language_1.resolveLanguageFromRequest)(req);
         const { id } = req.params;
         const { sortBy = 'random', page = 1, limit = 20 } = req.query;
         if (!mongoose_1.default.Types.ObjectId.isValid(id)) {
@@ -227,7 +234,7 @@ const getVotingCampaignDetail = async (req, res) => {
         }
         const entries = await entriesQuery;
         // Get vote data with masked usernames for each entry
-        const entriesWithVotes = await Promise.all(entries.map(async (entry) => {
+        const entriesWithVotesRaw = await Promise.all(entries.map(async (entry) => {
             const votes = await user_vote_1.default.find({ entryId: entry._id || entry.id })
                 .populate('userId', 'name')
                 .sort({ voteDate: -1 });
@@ -237,12 +244,16 @@ const getVotingCampaignDetail = async (req, res) => {
                 voteDate: vote.voteDate,
                 userName: maskUsername(vote.userId?.name || 'Anonymous')
             }));
+            const entryObject = entry.toJSON ? entry.toJSON() : entry;
             return {
-                ...entry.toJSON ? entry.toJSON() : entry,
+                ...entryObject,
+                title: (0, language_1.pickLocalizedText)(lang, entryObject.titleTranslations, ''),
+                description: (0, language_1.pickLocalizedText)(lang, entryObject.descriptionTranslations, ''),
                 votes: maskedVotes,
                 voteCount: votes.length
             };
         }));
+        const entriesWithVotes = entriesWithVotesRaw.filter((entry) => Boolean(entry.title && entry.description));
         // Get user's vote status if logged in
         let userVotes = [];
         if (req.user) {
@@ -257,11 +268,23 @@ const getVotingCampaignDetail = async (req, res) => {
             isActive: true,
             status: 'approved'
         });
+        const campaignObject = campaign.toJSON();
+        const localizedCampaign = {
+            ...campaignObject,
+            title: (0, language_1.pickLocalizedText)(lang, campaignObject.titleTranslations, ''),
+            description: (0, language_1.pickLocalizedText)(lang, campaignObject.descriptionTranslations, ''),
+        };
+        if (!localizedCampaign.title || !localizedCampaign.description) {
+            return res.status(404).json({
+                success: false,
+                message: 'Campaign not found or not active'
+            });
+        }
         res.json({
             success: true,
             data: {
                 campaign: {
-                    ...campaign.toJSON(),
+                    ...localizedCampaign,
                     status: dynamicStatus,
                     isVotingOpen: campaign.isVotingOpen(),
                     isVotingCompleted: campaign.isVotingCompleted(),

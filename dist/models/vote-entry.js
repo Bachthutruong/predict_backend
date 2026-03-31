@@ -21,6 +21,14 @@ const VoteEntrySchema = new mongoose_1.Schema({
         trim: true,
         maxlength: 2000
     },
+    titleTranslations: {
+        vi: { type: String, default: '' },
+        'zh-TW': { type: String, default: '' }
+    },
+    descriptionTranslations: {
+        vi: { type: String, default: '' },
+        'zh-TW': { type: String, default: '' }
+    },
     imageUrl: {
         type: String,
         default: ''

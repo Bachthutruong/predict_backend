@@ -3,9 +3,21 @@ import { Schema, model, models } from 'mongoose';
 const NewsArticleSchema = new Schema(
   {
     title: { type: String, required: true, trim: true },
+    titleTranslations: {
+      vi: { type: String, default: '' },
+      'zh-TW': { type: String, default: '' }
+    },
     slug: { type: String, required: true, unique: true, index: true },
     summary: { type: String, default: '' },
+    summaryTranslations: {
+      vi: { type: String, default: '' },
+      'zh-TW': { type: String, default: '' }
+    },
     content: { type: String, required: true },
+    contentTranslations: {
+      vi: { type: String, default: '' },
+      'zh-TW': { type: String, default: '' }
+    },
     coverImage: { type: String, default: '' },
     status: { type: String, enum: ['draft', 'published'], default: 'draft', index: true },
     publishedAt: { type: Date },

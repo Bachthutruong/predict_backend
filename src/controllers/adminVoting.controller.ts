@@ -4,10 +4,12 @@ import VoteEntry from '../models/vote-entry';
 import UserVote from '../models/user-vote';
 import User from '../models/user';
 import mongoose from 'mongoose';
+import { pickLocalizedText, resolveLanguageFromRequest } from '../utils/language';
 
 // Get all voting campaigns for admin
 export const getVotingCampaigns = async (req: Request, res: Response) => {
   try {
+    const lang = resolveLanguageFromRequest(req);
     const { page = 1, limit = 10, status, search } = req.query;
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
@@ -88,8 +90,11 @@ export const getVotingCampaigns = async (req: Request, res: Response) => {
             dynamicStatus = 'closed';
           }
         }
+        const campaignObject = campaign.toObject();
         return {
-          ...campaign.toObject(),
+          ...campaignObject,
+          title: pickLocalizedText(lang, campaignObject.titleTranslations, campaignObject.title),
+          description: pickLocalizedText(lang, campaignObject.descriptionTranslations, campaignObject.description),
           entryCount,
           totalVotes,
           status: dynamicStatus // Ghi đè status trả về
@@ -121,6 +126,7 @@ export const getVotingCampaigns = async (req: Request, res: Response) => {
 // Get single voting campaign with entries
 export const getVotingCampaign = async (req: Request, res: Response) => {
   try {
+    const lang = resolveLanguageFromRequest(req);
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -165,14 +171,26 @@ export const getVotingCampaign = async (req: Request, res: Response) => {
     const totalVotes = await UserVote.countDocuments({ campaignId: id });
     const uniqueVoters = await UserVote.distinct('userId', { campaignId: id });
 
+    const campaignObject = campaign.toObject();
+    const localizedEntries = entries.map((entry: any) => {
+      const entryObj = entry.toObject();
+      return {
+        ...entryObj,
+        title: pickLocalizedText(lang, entryObj.titleTranslations, entryObj.title),
+        description: pickLocalizedText(lang, entryObj.descriptionTranslations, entryObj.description)
+      };
+    });
+
     res.json({
       success: true,
       data: {
         campaign: {
-          ...campaign.toObject(),
+          ...campaignObject,
+          title: pickLocalizedText(lang, campaignObject.titleTranslations, campaignObject.title),
+          description: pickLocalizedText(lang, campaignObject.descriptionTranslations, campaignObject.description),
           status: dynamicStatus
         },
-        entries,
+        entries: localizedEntries,
         statistics: {
           totalEntries: entries.length,
           totalVotes,
@@ -195,6 +213,8 @@ export const createVotingCampaign = async (req: Request, res: Response) => {
     const {
       title,
       description,
+      titleTranslations,
+      descriptionTranslations,
       imageUrl,
       startDate,
       endDate,
@@ -233,8 +253,16 @@ export const createVotingCampaign = async (req: Request, res: Response) => {
     }
 
     const campaign = new VotingCampaign({
-      title,
-      description,
+      title: titleTranslations?.vi || title,
+      description: descriptionTranslations?.vi || description,
+      titleTranslations: {
+        vi: titleTranslations?.vi || title || '',
+        'zh-TW': titleTranslations?.['zh-TW'] || ''
+      },
+      descriptionTranslations: {
+        vi: descriptionTranslations?.vi || description || '',
+        'zh-TW': descriptionTranslations?.['zh-TW'] || ''
+      },
       imageUrl: imageUrl || '',
       startDate: start,
       endDate: end,
@@ -265,7 +293,7 @@ export const createVotingCampaign = async (req: Request, res: Response) => {
 export const updateVotingCampaign = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const updates = { ...req.body };
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -280,6 +308,18 @@ export const updateVotingCampaign = async (req: Request, res: Response) => {
         success: false,
         message: 'Campaign not found'
       });
+    }
+    if (updates.titleTranslations || updates.descriptionTranslations) {
+      updates.titleTranslations = {
+        vi: updates.titleTranslations?.vi || updates.title || campaign.titleTranslations?.vi || campaign.title || '',
+        'zh-TW': updates.titleTranslations?.['zh-TW'] || campaign.titleTranslations?.['zh-TW'] || ''
+      };
+      updates.descriptionTranslations = {
+        vi: updates.descriptionTranslations?.vi || updates.description || campaign.descriptionTranslations?.vi || campaign.description || '',
+        'zh-TW': updates.descriptionTranslations?.['zh-TW'] || campaign.descriptionTranslations?.['zh-TW'] || ''
+      };
+      updates.title = updates.titleTranslations.vi || campaign.title;
+      updates.description = updates.descriptionTranslations.vi || campaign.description;
     }
 
     // Don't allow updates if campaign is active and has votes
@@ -407,7 +447,7 @@ export const deleteVotingCampaign = async (req: Request, res: Response) => {
 export const addVoteEntry = async (req: Request, res: Response) => {
   try {
     const { campaignId } = req.params;
-    const { title, description, imageUrl, imageUrls, videoUrl } = req.body;
+    const { title, description, titleTranslations, descriptionTranslations, imageUrl, imageUrls, videoUrl } = req.body;
     const userId = (req as any).user.id;
 
     if (!mongoose.Types.ObjectId.isValid(campaignId)) {
@@ -434,8 +474,16 @@ export const addVoteEntry = async (req: Request, res: Response) => {
 
     const entry = new VoteEntry({
       campaignId,
-      title,
-      description,
+      title: titleTranslations?.vi || title,
+      description: descriptionTranslations?.vi || description,
+      titleTranslations: {
+        vi: titleTranslations?.vi || title || '',
+        'zh-TW': titleTranslations?.['zh-TW'] || ''
+      },
+      descriptionTranslations: {
+        vi: descriptionTranslations?.vi || description || '',
+        'zh-TW': descriptionTranslations?.['zh-TW'] || ''
+      },
       imageUrl: imageUrl || '',
       imageUrls: imageUrls || [],
       videoUrl: videoUrl || '',
@@ -462,7 +510,26 @@ export const addVoteEntry = async (req: Request, res: Response) => {
 export const updateVoteEntry = async (req: Request, res: Response) => {
   try {
     const { entryId } = req.params;
-    const updates = req.body;
+    const updates = { ...req.body };
+    const existingEntry = await VoteEntry.findById(entryId);
+    if (!existingEntry) {
+      return res.status(404).json({
+        success: false,
+        message: 'Entry not found'
+      });
+    }
+    if (updates.titleTranslations || updates.descriptionTranslations) {
+      updates.titleTranslations = {
+        vi: updates.titleTranslations?.vi || updates.title || existingEntry.titleTranslations?.vi || existingEntry.title || '',
+        'zh-TW': updates.titleTranslations?.['zh-TW'] || existingEntry.titleTranslations?.['zh-TW'] || ''
+      };
+      updates.descriptionTranslations = {
+        vi: updates.descriptionTranslations?.vi || updates.description || existingEntry.descriptionTranslations?.vi || existingEntry.description || '',
+        'zh-TW': updates.descriptionTranslations?.['zh-TW'] || existingEntry.descriptionTranslations?.['zh-TW'] || ''
+      };
+      updates.title = updates.titleTranslations.vi || existingEntry.title;
+      updates.description = updates.descriptionTranslations.vi || existingEntry.description;
+    }
 
     if (!mongoose.Types.ObjectId.isValid(entryId)) {
       return res.status(400).json({
@@ -476,13 +543,6 @@ export const updateVoteEntry = async (req: Request, res: Response) => {
       updates,
       { new: true, runValidators: true }
     ).populate('submittedBy', 'name email');
-
-    if (!entry) {
-      return res.status(404).json({
-        success: false,
-        message: 'Entry not found'
-      });
-    }
 
     res.json({
       success: true,

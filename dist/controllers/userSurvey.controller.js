@@ -9,11 +9,13 @@ const survey_submission_1 = __importDefault(require("../models/survey-submission
 const user_1 = __importDefault(require("../models/user"));
 const point_transaction_1 = __importDefault(require("../models/point-transaction"));
 const mongoose_1 = __importDefault(require("mongoose"));
+const language_1 = require("../utils/language");
 // @desc    Get all published surveys available to users
 // @route   GET /api/surveys
 // @access  Private
 const getPublishedSurveys = async (req, res) => {
     try {
+        const lang = (0, language_1.resolveLanguageFromRequest)(req);
         const surveys = await survey_1.default.find({
             status: 'published',
             $or: [
@@ -22,7 +24,17 @@ const getPublishedSurveys = async (req, res) => {
                 { endDate: { $gt: new Date() } }
             ]
         }).select('-questions.isAntiFraud -questions.options.antiFraudGroupId').sort({ createdAt: -1 });
-        res.json({ message: 'Available surveys fetched successfully', data: surveys });
+        const localized = surveys
+            .map((survey) => {
+            const surveyObj = survey.toObject();
+            return {
+                ...surveyObj,
+                title: (0, language_1.pickLocalizedText)(lang, surveyObj.titleTranslations, ''),
+                description: (0, language_1.pickLocalizedText)(lang, surveyObj.descriptionTranslations, '')
+            };
+        })
+            .filter((survey) => Boolean(survey.title && survey.description));
+        res.json({ message: 'Available surveys fetched successfully', data: localized });
     }
     catch (error) {
         console.error('Error fetching published surveys:', error);
@@ -35,11 +47,34 @@ exports.getPublishedSurveys = getPublishedSurveys;
 // @access  Private
 const getSurveyToFill = async (req, res) => {
     try {
+        const lang = (0, language_1.resolveLanguageFromRequest)(req);
         const survey = await survey_1.default.findOne({
             _id: req.params.id,
             status: 'published'
         }).select('-questions.isAntiFraud -questions.options.antiFraudGroupId');
         if (!survey) {
+            return res.status(404).json({ message: 'Survey not found or is not currently active.' });
+        }
+        const surveyObject = survey.toObject();
+        const localizedQuestions = (surveyObject.questions || [])
+            .map((question) => ({
+            ...question,
+            text: (0, language_1.pickLocalizedText)(lang, question.textTranslations, ''),
+            options: (question.options || [])
+                .map((option) => ({
+                ...option,
+                text: (0, language_1.pickLocalizedText)(lang, option.textTranslations, '')
+            }))
+                .filter((option) => Boolean(option.text))
+        }))
+            .filter((question) => Boolean(question.text));
+        const localizedSurvey = {
+            ...surveyObject,
+            title: (0, language_1.pickLocalizedText)(lang, surveyObject.titleTranslations, ''),
+            description: (0, language_1.pickLocalizedText)(lang, surveyObject.descriptionTranslations, ''),
+            questions: localizedQuestions
+        };
+        if (!localizedSurvey.title || !localizedSurvey.description) {
             return res.status(404).json({ message: 'Survey not found or is not currently active.' });
         }
         // Check if user has already submitted this survey
@@ -48,7 +83,7 @@ const getSurveyToFill = async (req, res) => {
         if (existingSubmission) {
             return res.status(403).json({ message: 'You have already completed this survey.' });
         }
-        res.json({ message: 'Survey details fetched successfully', data: survey });
+        res.json({ message: 'Survey details fetched successfully', data: localizedSurvey });
     }
     catch (error) {
         console.error('Error fetching survey to fill:', error);
@@ -62,6 +97,7 @@ exports.getSurveyToFill = getSurveyToFill;
 const submitSurvey = async (req, res) => {
     const surveyId = req.params.id;
     const userId = req.user.id;
+    const lang = (0, language_1.resolveLanguageFromRequest)(req);
     const { answers } = req.body;
     const session = await mongoose_1.default.startSession();
     session.startTransaction();
@@ -87,7 +123,10 @@ const submitSurvey = async (req, res) => {
                 if (userAnswer && userAnswer.answer.length > 0) {
                     // For each answer from the user, find the corresponding option in the survey question
                     for (const ans of userAnswer.answer) {
-                        const option = q.options.find(opt => opt.text === ans);
+                        const option = q.options.find(opt => {
+                            const localizedOptionText = (0, language_1.pickLocalizedText)(lang, opt.textTranslations, opt.text || '');
+                            return opt.text === ans || localizedOptionText === ans;
+                        });
                         if (option && option.antiFraudGroupId) {
                             fraudAnswersGroupIds.push(option.antiFraudGroupId);
                         }
@@ -106,7 +145,7 @@ const submitSurvey = async (req, res) => {
             const question = survey.questions.find(q => q.id === ans.questionId);
             return {
                 questionId: ans.questionId,
-                questionText: question ? question.text : 'Unknown Question',
+                questionText: question ? (0, language_1.pickLocalizedText)(lang, question.textTranslations, question.text) : 'Unknown Question',
                 questionType: question ? question.type : 'unknown',
                 answer: ans.answer,
                 otherText: ans.otherText,

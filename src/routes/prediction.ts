@@ -9,6 +9,7 @@ import Product from '../models/Product';
 import InventoryLog from '../models/InventoryLog';
 import UserSuggestion from '../models/UserSuggestion';
 import { getCache, setCache, clearCache, isCacheValid } from '../utils/cache';
+import { pickLocalizedText, resolveLanguageFromRequest } from '../utils/language';
 
 // Extend AuthRequest to include prediction and canViewAnswer
 interface PredictionAuthRequest extends AuthRequest {
@@ -49,9 +50,10 @@ function isPredictionActive(p: any): boolean {
 // Get all active predictions (filter by time: no dates = always, or within startDate-endDate)
 router.get('/', async (req, res) => {
   try {
+    const lang = resolveLanguageFromRequest(req);
     // Check cache first
-    if (isCacheValid()) {
-      const { cache } = getCache();
+    if (isCacheValid(lang)) {
+      const { cache } = getCache(lang);
       return res.json({
         success: true,
         data: cache,
@@ -76,17 +78,22 @@ router.get('/', async (req, res) => {
     const winnerMap = Object.fromEntries(winnerCounts.map((w: any) => [w._id.toString(), w.count]));
 
     const transformedPredictions = predictions.map((prediction: any) => {
+      const localizedTitle = pickLocalizedText(lang, prediction.titleTranslations, '');
+      const localizedDescription = pickLocalizedText(lang, prediction.descriptionTranslations, '');
+      if (!localizedTitle || !localizedDescription) return null;
       const p: any = {
         ...prediction,
+        title: localizedTitle,
+        description: localizedDescription,
         id: prediction._id.toString(),
         winnerCount: winnerMap[prediction._id.toString()] || 0,
         maxWinners: prediction.maxWinners ?? 1
       };
       p.isCurrentlyActive = isPredictionActive(prediction);
       return p;
-    });
+    }).filter(Boolean);
 
-    setCache(transformedPredictions);
+    setCache(transformedPredictions, lang);
 
     res.json({
       success: true,
@@ -105,6 +112,7 @@ router.get('/', async (req, res) => {
 // Get prediction details - optionalAuthenticate để có userAttemptCount khi user đăng nhập
 router.get('/:id', optionalAuthenticate, checkPredictionViewAccess as any, async (req: any, res) => {
   try {
+    const lang = resolveLanguageFromRequest(req);
     const { page = 1, limit = 20 } = req.query;
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
@@ -119,6 +127,11 @@ router.get('/:id', optionalAuthenticate, checkPredictionViewAccess as any, async
 
     if (!prediction) {
       return res.status(404).json({ success: false, message: 'Prediction not found' });
+    }
+    const localizedTitle = pickLocalizedText(lang, (prediction as any).titleTranslations, '');
+    const localizedDescription = pickLocalizedText(lang, (prediction as any).descriptionTranslations, '');
+    if (!localizedTitle || !localizedDescription) {
+      return res.status(404).json({ success: false, message: 'Prediction not found for language' });
     }
 
     const predictionObj = prediction.toObject() as any;
@@ -170,6 +183,8 @@ router.get('/:id', optionalAuthenticate, checkPredictionViewAccess as any, async
       data: {
         prediction: {
           ...predictionObj,
+          title: localizedTitle,
+          description: localizedDescription,
           id: predictionObj._id.toString(),
           answer: canViewAnswer ? prediction.getDecryptedAnswer() : '***ENCRYPTED***',
           rewardPoints: prediction.rewardPoints,

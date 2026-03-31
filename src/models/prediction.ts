@@ -12,6 +12,14 @@ const RewardItemSchema = new Schema({
 const PredictionSchema = new Schema({
   title: { type: String, required: true },
   description: { type: String, required: true },
+  titleTranslations: {
+    vi: { type: String, default: '' },
+    'zh-TW': { type: String, default: '' }
+  },
+  descriptionTranslations: {
+    vi: { type: String, default: '' },
+    'zh-TW': { type: String, default: '' }
+  },
   imageUrl: { type: String, required: false },
   'data-ai-hint': { type: String },
   answer: { type: String, required: true },
